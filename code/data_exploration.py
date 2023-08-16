@@ -2,7 +2,7 @@ import json
 from collections import Counter
 
 # 1. Load the JSON data
-json_path = r'/home/ben/reef-audio-representation-learning/data/dataset.json'
+json_path = r'/home/ben/data/dataset.json'
 with open(json_path, 'r') as f: 
     data = json.load(f)
 
