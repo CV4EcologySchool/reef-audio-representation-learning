@@ -1,2 +1,2 @@
 # Ignore data folder
-full_dataset/
+# data was moved to ssh, not hdd so no longer in the git tracked folder
