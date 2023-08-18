@@ -1,10 +1,10 @@
 from models import encoder
 from models import losses
 from models import resnet
-from models import ssl
+from models import ssl1
 
 REGISTERED_MODELS = {
-    'sim-clr': ssl.SimCLR,
-    'eval': ssl.SSLEval,
-    'semi-supervised-eval': ssl.SemiSupervisedEval,
+    'sim-clr': ssl1.SimCLR,
+    'eval': ssl1.SSLEval,
+    'semi-supervised-eval': ssl1.SemiSupervisedEval,
 }

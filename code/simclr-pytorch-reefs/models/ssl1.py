@@ -19,7 +19,7 @@ from utils.lars_optimizer import LARS
 import scipy
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
-#from models.my_custom_dataset import CTDataset
+from models.my_custom_dataset import CTDataset
 import copy
 
 class BaseSSL(nn.Module):
@@ -27,8 +27,8 @@ class BaseSSL(nn.Module):
     Inspired by the PYTORCH LIGHTNING https://pytorch-lightning.readthedocs.io/en/latest/
     Similar but lighter and customized version.
     """
-    DATA_ROOT = os.environ.get('DATA_ROOT', os.path.dirname(os.path.abspath(__file__)) + '/data')
-    IMAGENET_PATH = os.environ.get('IMAGENET_PATH', '/home/aashukha/imagenet/raw-data/')
+    ##DATA_ROOT = os.environ.get('DATA_ROOT', os.path.dirname(os.path.abspath(__file__)) + '/data')
+    ##IMAGENET_PATH = os.environ.get('IMAGENET_PATH', '/home/aashukha/imagenet/raw-data/')
 
     def __init__(self, hparams):
         super().__init__()
@@ -71,7 +71,7 @@ class BaseSSL(nn.Module):
 
     def prepare_data(self):
         self.trainset = dataset
-        train_transform, test_transform = self.transforms()
+        train_transform, test_transform = self.transforms() ### comment out later??
         # print('The following train transform is used:\n', train_transform)
         # print('The following test transform is used:\n', test_transform)
         if self.hparams.data == 'cifar':
@@ -89,15 +89,15 @@ class BaseSSL(nn.Module):
 
             #cfg = {'data_root':'/root/all_ROV_crops_with_unknown/all_ROV_crops_with_unknown', 'train_label_file':'../10_percent_train_with_unknown.csv', 'val_label_file':'../5_percent_val_with_unknown.csv', 'test_label_file':'../10_percent_test_with_unknown.csv', 'unlabeled_file':'../75_percent_unlabeled_with_unknown.csv'}
             #### tarun : for pretraining self.trainset is the unlabeled dataset.
-            self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform)
+            self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform) ##################################
             #### tarun : for eval or finetuning,self.trainset is the 10percent train dataset
             #self.trainset = CTDataset(cfg, split='train', transform=train_transform)
-            self.testset = CTDataset(cfg, split='val', transform=test_transform)
+            ##self.testset = CTDataset(cfg, split='val', transform=test_transform)
         else:
             raise NotImplementedError
 
     def dataloaders(self, iters=None):
-        train_batch_sampler, test_batch_sampler = self.samplers()
+        train_batch_sampler = self.samplers()#, test_batch_sampler = self.samplers()
         if iters is not None:
             train_batch_sampler = datautils.ContinousSampler(
                 train_batch_sampler,
@@ -110,14 +110,16 @@ class BaseSSL(nn.Module):
             pin_memory=True,
             batch_sampler=train_batch_sampler,
         )
-        test_loader = torch.utils.data.DataLoader(
-            self.testset,
-            num_workers=self.hparams.workers,
-            pin_memory=True,
-            batch_sampler=test_batch_sampler,
-        )
 
-        return train_loader, test_loader
+        ########################################################################## comment out
+        ## test_loader = torch.utils.data.DataLoader(
+        ##     self.testset,
+        ##     num_workers=self.hparams.workers,
+        ##     pin_memory=True,
+        ##     batch_sampler=test_batch_sampler,
+        ## )
+
+        return train_loader#, test_loader
 
     @staticmethod
     def add_parent_hparams(add_model_hparams):
@@ -221,7 +223,7 @@ class SimCLR(BaseSSL):
 
         return logs
 
-    def test_step(self, batch):
+    def test_step(self, batch): ## comment out later?
         return self.step(batch)
 
     def samplers(self):
@@ -229,11 +231,11 @@ class SimCLR(BaseSSL):
             # trainsampler = torch.utils.data.distributed.DistributedSampler(self.trainset, num_replicas=1, rank=0)
             trainsampler = torch.utils.data.distributed.DistributedSampler(self.trainset)
             print(f'Process {dist.get_rank()}: {len(trainsampler)} training samples per epoch')
-            testsampler = torch.utils.data.distributed.DistributedSampler(self.testset)
-            print(f'Process {dist.get_rank()}: {len(testsampler)} test samples')
+            ##testsampler = torch.utils.data.distributed.DistributedSampler(self.testset)
+            ##print(f'Process {dist.get_rank()}: {len(testsampler)} test samples')
         else:
             trainsampler = torch.utils.data.sampler.RandomSampler(self.trainset)
-            testsampler = torch.utils.data.sampler.RandomSampler(self.testset)
+            ##testsampler = torch.utils.data.sampler.RandomSampler(self.testset)
 
         batch_sampler = datautils.MultiplyBatchSampler
         # batch_sampler.MULTILPLIER = self.hparams.multiplier if self.hparams.dist == 'dp' else 1
@@ -245,11 +247,11 @@ class SimCLR(BaseSSL):
 
         return (
             self.batch_trainsampler,
-            batch_sampler(testsampler, self.hparams.batch_size, drop_last=True)
+            ##batch_sampler(testsampler, self.hparams.batch_size, drop_last=True)
         )
 
     def transforms(self):
-        if self.hparams.data == 'cifar':
+        if self.hparams.data == 'cifar':   ##### not using cifar so this wont get used
             train_transform = transforms.Compose([
                 transforms.RandomResizedCrop(
                     32,
@@ -279,9 +281,9 @@ class SimCLR(BaseSSL):
                 GaussianBlur(im_size // 10, 0.5),
                 datautils.Clip(),
             ])
-            test_transform = train_transform
+            ##test_transform = train_transform
 
-        return train_transform, test_transform
+        return train_transform##, test_transform
 
     def get_ckpt(self):
         return {
@@ -453,6 +455,8 @@ class SSLEval(BaseSSL):
             pin_memory=True,
             batch_sampler=trainsampler,
         )
+
+        ########################################################## comment out
         test_loader = torch.utils.data.DataLoader(
             self.testset,
             num_workers=self.hparams.workers,
@@ -532,7 +536,7 @@ class SemiSupervisedEval(SSLEval):
         parser.add_argument('--train_size', default=-1, type=int)
         parser.add_argument('--data_split_seed', default=42, type=int)
         parser.add_argument('--n_augs_train', default=-1, type=int)
-        parser.add_argument('--n_augs_test', default=-1, type=int)
+        parser.add_argument('--n_augs_test', default=-1, type=int) ######## issue??
         parser.add_argument('--acc_on_unlabeled', default=False, type=bool)
 
     def prepare_data(self):
