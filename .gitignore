@@ -1,2 +1,4 @@
 # Ignore data folder
-/home/ben/data/full_dataset
+data/full_dataset
+logs/
+
