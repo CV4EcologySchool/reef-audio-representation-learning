@@ -153,7 +153,7 @@ class BaseSSL(nn.Module):
                 
             #self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform) ##################################
             #################################################
-            # fixing dataset issue
+            # fixing dataset issue we add a load of load of code here to preprocess data and make train.dataset
             # Load the JSON data from the file
             json_path = '/home/ben/data/dataset.json'
             dataset_path = '/home/ben/data/full_dataset/'

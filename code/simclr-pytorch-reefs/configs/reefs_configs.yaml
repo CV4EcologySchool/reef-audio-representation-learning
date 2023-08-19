@@ -9,7 +9,7 @@ dist: dp
 dist_address: '198.176.97.113' # changed to bens remote machine
 eval_freq: 30
 gpu: 1 ################# changed from 0 
-iters: 1 # num batches seen, not epochs! So 1 epoch 
+iters: 5273 # num batches seen, not epochs! So 1 epoch. 54000/512 = 105.5 iters per epoch
 log_freq: 5
 lr: 0.6
 lr_schedule: warmup-anneal
