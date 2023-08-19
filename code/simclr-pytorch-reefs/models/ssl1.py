@@ -19,9 +19,67 @@ from utils.lars_optimizer import LARS
 import scipy
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
-from models.my_custom_dataset import CTDataset
+from models.my_custom_dataset import CTDataset ############################# fixing dataset issue, so most doesnt get used now
 import copy
 
+import json
+import pandas as pd
+from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
+from opensoundscape.ml.datasets import AudioFileDataset
+# helper function for displaying a sample as an image
+from opensoundscape.preprocess.utils import show_tensor, show_tensor_grid
+from opensoundscape import Action
+from opensoundscape.spectrogram import MelSpectrogram
+
+
+
+##################
+def _melspec_linear_to_db(melspec):
+    
+    # because there's an underflow error during MelSpectrogram.from_audio() with dB_scale = True,
+    # we instead perform dB scaling afterwards
+    # which for some mysterious reason works
+    
+    melspectrogram = 10 * np.log10(
+                    melspec.spectrogram,
+                    where=melspec.spectrogram > 0,
+                    out=np.full(melspec.spectrogram.shape, -np.inf),)
+
+    # limit the decibel range (-100 to -20 dB by default)
+    # values below lower limit set to lower limit,
+    # values above upper limit set to uper limit
+    min_db, max_db = melspec.decibel_limits
+    melspectrogram[melspectrogram > max_db] = max_db
+    melspectrogram[melspectrogram < min_db] = min_db
+
+    return MelSpectrogram(times=melspec.times,
+                        frequencies=melspec.frequencies,
+                        spectrogram=melspectrogram,
+                        decibel_limits=melspec.decibel_limits,                   
+    )
+
+def _my_melspec(audio):
+    melspec_linear = MelSpectrogram.from_audio(audio,dB_scale=False, window_samples = 512) #adjust params, use MelSpectrogram.from_audio to see what these are
+    melspec_db = _melspec_linear_to_db(melspec_linear)
+    return melspec_db
+
+def collate_audio_samples_to_tensors(batch):
+    """
+    takes a list of AudioSample objects, returns:
+        (Tensor of stacked AudioSample.data, Tensor of stacked AudioSample.label.values)
+    
+    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset) 
+    but want the traditional output of PyTorch Dataloaders
+    """
+    tensors = torch.stack([i.data for i in batch])
+    #labels =  torch.tensor([i.labels.tolist() for i in batch])
+    return tensors #, labels
+
+##################    
+
+
+
+        
 class BaseSSL(nn.Module):
     """
     Inspired by the PYTORCH LIGHTNING https://pytorch-lightning.readthedocs.io/en/latest/
@@ -67,11 +125,11 @@ class BaseSSL(nn.Module):
         pass
 
     def samplers(self):
-        return None, None
+        return None ## ,None
 
     def prepare_data(self):
-        self.trainset = dataset
-        train_transform, test_transform = self.transforms() ### comment out later??
+        ##self.trainset = dataset
+        ##train_transform, test_transform = self.transforms() ### comment out later??
         # print('The following train transform is used:\n', train_transform)
         # print('The following test transform is used:\n', test_transform)
         if self.hparams.data == 'cifar':
@@ -83,13 +141,78 @@ class BaseSSL(nn.Module):
             self.trainset = datasets.ImageFolder(traindir, transform=train_transform)
             self.testset = datasets.ImageFolder(valdir, transform=test_transform)
         elif self.hparams.data == 'ROV':
-             
+
+
+            # not used with new dataset issue fix but can leave in for now
             cfg = {'dataset_path': '/home/ben/data/full_dataset/', #############################
                 'json_path': '/home/ben/data/dataset.json'}
 
             #cfg = {'data_root':'/root/all_ROV_crops_with_unknown/all_ROV_crops_with_unknown', 'train_label_file':'../10_percent_train_with_unknown.csv', 'val_label_file':'../5_percent_val_with_unknown.csv', 'test_label_file':'../10_percent_test_with_unknown.csv', 'unlabeled_file':'../75_percent_unlabeled_with_unknown.csv'}
             #### tarun : for pretraining self.trainset is the unlabeled dataset.
-            self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform) ##################################
+            
+                
+            #self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform) ##################################
+            #################################################
+            # fixing dataset issue
+            # Load the JSON data from the file
+            json_path = '/home/ben/data/dataset.json'
+            dataset_path = '/home/ben/data/full_dataset/'
+            with open(json_path, "r") as file:
+                data = json.load(file)
+
+            # Extract the list of dictionaries from the "audio" key
+            audio_data = data.get("audio", [])
+
+            # Filter the list to only include entries where data_type = "train_data"
+            data = [entry for entry in audio_data if entry.get("data_type") == "train_data"]
+
+            # Convert the filtered list into a DataFrame
+            #df = pd.DataFrame(self.data)
+            df = pd.DataFrame(data)#[:32]) to rig dataset size for testing
+
+            # Convert the list of dictionaries (which is the value of the main dictionary) into a DataFrame
+            #df = pd.DataFrame(data[list(data.keys())[0]])
+            #self.data = {k: v for k, v in data.items() if v.get("data_type") == "train_data"}
+            #df = pd.DataFrame(self.data[list(self.data.keys())[0]])
+
+
+            # Create a dataframe with just file_path and a class column (req for AudioFileDataset)
+            transformed_df = df[['file_name', 'class']].copy()
+
+            # rename 'file_name' column to 'file'
+            transformed_df.rename(columns={'file_name': 'file'}, inplace=True)
+
+            # set file to be the index for AudioFileDataset
+            transformed_df.set_index('file', inplace=True)
+
+            # set all classes to 1 as AudioFileDataset requires class
+            transformed_df['class'] = 1
+
+            # append dataset_path to start of file_name column
+            transformed_df.index = dataset_path + transformed_df.index
+            #transformed_df.head() # for notebook
+
+            # initialize the preprocessor (forget what this does?)
+            pre = SpectrogramPreprocessor(sample_duration=1.92)
+
+            # initialize the dataset
+            dataset = AudioFileDataset(transformed_df, pre)
+
+            # change the bandpass from the default to 8kHz
+            dataset.preprocessor.pipeline.bandpass.set(min_f=0,max_f=8000)
+            
+            melspec_action = Action(_my_melspec)
+            melspec_bandpass_action = Action(MelSpectrogram.bandpass, min_f=0, max_f=8000)
+
+            dataset.preprocessor.pipeline['to_spec'] = melspec_action
+            dataset.preprocessor.pipeline['bandpass'] = melspec_bandpass_action
+            print(f'Total number of sample found: {len(dataset)}')
+            #print(dataset[0].shape)
+            self.trainset = dataset
+
+    
+            ##############################################
+            
             #### tarun : for eval or finetuning,self.trainset is the 10percent train dataset
             #self.trainset = CTDataset(cfg, split='train', transform=train_transform)
             ##self.testset = CTDataset(cfg, split='val', transform=test_transform)
@@ -98,18 +221,24 @@ class BaseSSL(nn.Module):
 
     def dataloaders(self, iters=None):
         train_batch_sampler = self.samplers()#, test_batch_sampler = self.samplers()
-        if iters is not None:
-            train_batch_sampler = datautils.ContinousSampler(
-                train_batch_sampler,
-                iters
-            )
-
+        # if iters is not None:
+        #     train_batch_sampler = datautils.ContinousSampler(
+        #         train_batch_sampler,
+        #         iters
+        #     )
         train_loader = torch.utils.data.DataLoader(
             self.trainset,
             num_workers=self.hparams.workers,
             pin_memory=True,
-            batch_sampler=train_batch_sampler,
+            #batch_sampler=train_batch_sampler,
+            collate_fn = collate_audio_samples_to_tensors,   #new
+            shuffle = True, #new
+            batch_size = self.hparams.batch_size
+
         )
+        for batch in train_loader:
+            print(f'Batch shape: {batch.shape}')
+            break
 
         ########################################################################## comment out
         ## test_loader = torch.utils.data.DataLoader(

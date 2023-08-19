@@ -73,9 +73,22 @@ class CTDataset(Dataset):
         # Load the JSON data from the file
         with open(json_path, "r") as file:
             data = json.load(file)
-            
+
+        # Extract the list of dictionaries from the "audio" key
+        audio_data = data.get("audio", [])
+
+        # Filter the list to only include entries where data_type = "train_data"
+        self.data = [entry for entry in audio_data if entry.get("data_type") == "train_data"]
+
+        # Convert the filtered list into a DataFrame
+        #df = pd.DataFrame(self.data)
+        df = pd.DataFrame(self.data[:32])
+
         # Convert the list of dictionaries (which is the value of the main dictionary) into a DataFrame
-        df = pd.DataFrame(data[list(data.keys())[0]])
+        #df = pd.DataFrame(data[list(data.keys())[0]])
+        #self.data = {k: v for k, v in data.items() if v.get("data_type") == "train_data"}
+        #df = pd.DataFrame(self.data[list(self.data.keys())[0]])
+
 
         # Create a dataframe with just file_path and a class column (req for AudioFileDataset)
         transformed_df = df[['file_name', 'class']].copy()
@@ -147,8 +160,5 @@ class CTDataset(Dataset):
     
     def __getitem__(self, idx):
         # Return the desired data point from self.dataset
+        print(idx)
         return self.dataset[idx].data
-
-
-
- 

@@ -40,14 +40,14 @@ def add_learner_params(parser):
     parser.add_argument('-j', '--workers', default=4, type=int, help='The number of data loader workers')
     parser.add_argument('--eval_only', default=False, type=bool, help='Skips the training step if True')
     parser.add_argument('--seed', default=-1, type=int, help='Random seed')
-    # parallelizm params:
+    # # parallelizm params:
     parser.add_argument('--dist', default='dp', type=str,
-        help='dp: DataParallel, ddp: DistributedDataParallel',
-        choices=['dp', 'ddp'],
+        help='None: default, dp: DataParallel, ddp: DistributedDataParallel',
+        choices=["", 'dp', 'ddp'],
     )
-    parser.add_argument('--dist_address', default='127.0.0.1:1234', type=str,
-        help='the address and a port of the main node in the <address>:<port> format'
-    )
+    # parser.add_argument('--dist_address', default='127.0.0.1:1234', type=str,
+    #     help='the address and a port of the main node in the <address>:<port> format'
+    # )
     parser.add_argument('--node_rank', default=0, type=int,
         help='Rank of the node (script launched): 0 for the main node and 1,... for the others',
     )
@@ -87,6 +87,7 @@ def main():
     args.gpu = 0
     ngpus = torch.cuda.device_count()
     args.number_of_processes = 1
+    print(f'ARGS DIST: {args.dist}')
     if args.dist == 'ddp':
         # add additional argument to be able to retrieve # of processes from logs
         # and don't change initial arguments to reproduce the experiment
@@ -145,11 +146,11 @@ def main_worker(gpu, ngpus, args):
     # Data loading code
     print ('data loading time')
     model.prepare_data()
-    train_loader, val_loader = model.dataloaders(iters=args.iters)
+    train_loader = model.dataloaders(iters=args.iters)#, val_loader = model.dataloaders(iters=args.iters)
 
     # define optimizer
     cur_iter = 0
-    optimizer, scheduler = models.ssl.configure_optimizers(args, model, cur_iter - 1)
+    optimizer, scheduler = models.ssl1.configure_optimizers(args, model, cur_iter - 1)
 
     # optionally resume from a checkpoint
     if args.ckpt and not args.eval_only:
@@ -189,22 +190,23 @@ def main_worker(gpu, ngpus, args):
             if cur_iter % args.save_freq == 0 and args.rank == 0:
                 save_checkpoint(args.root, model, optimizer, cur_iter)
 
-            if cur_iter % args.eval_freq == 0 or cur_iter >= args.iters:
-                # TODO: aggregate metrics over all processes
-                test_logs = []
-                model.eval()
-                with torch.no_grad():
-                    for batch in val_loader:
-                        #batch = [x.to(device) for x in batch]
-                        batch = batch.to(device)
-                        # forward pass
-                        logs = model.test_step(batch)
-                        # save logs for the batch
-                        test_logs.append(logs)
-                model.train()
+            ### This was an eval component Turan used, we have no eval data
+            # if cur_iter % args.eval_freq == 0 or cur_iter >= args.iters:
+            #     # TODO: aggregate metrics over all processes
+            #     test_logs = []
+            #     model.eval()
+                # with torch.no_grad(): #################################################################
+                #     for batch in val_loader:
+                #         #batch = [x.to(device) for x in batch]
+                #         batch = batch.to(device)
+                #         # forward pass
+                #         logs = model.test_step(batch)
+                #         # save logs for the batch
+                #         test_logs.append(logs)
+                # model.train()
 
-                test_logs = utils.agg_all_metrics(test_logs)
-                logger.add_logs(cur_iter, test_logs, pref='test_')
+                # test_logs = utils.agg_all_metrics(test_logs)
+                # logger.add_logs(cur_iter, test_logs, pref='test_')
 
             it_time += time.time() - start_time
 
