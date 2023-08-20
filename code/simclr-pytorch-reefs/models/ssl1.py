@@ -22,6 +22,7 @@ import torch.distributed as dist
 from models.my_custom_dataset import CTDataset ############################# fixing dataset issue, so most doesnt get used now
 import copy
 
+# added by ben
 import json
 import pandas as pd
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
@@ -132,16 +133,15 @@ class BaseSSL(nn.Module):
         ##train_transform, test_transform = self.transforms() ### comment out later??
         # print('The following train transform is used:\n', train_transform)
         # print('The following test transform is used:\n', test_transform)
-        if self.hparams.data == 'cifar':
-            self.trainset = datasets.CIFAR10(root=self.DATA_ROOT, train=True, download=True, transform=train_transform)
-            self.testset = datasets.CIFAR10(root=self.DATA_ROOT, train=False, download=True, transform=test_transform)
-        elif self.hparams.data == 'imagenet':
-            traindir = os.path.join(self.IMAGENET_PATH, 'train')
-            valdir = os.path.join(self.IMAGENET_PATH, 'val')
-            self.trainset = datasets.ImageFolder(traindir, transform=train_transform)
-            self.testset = datasets.ImageFolder(valdir, transform=test_transform)
-        elif self.hparams.data == 'ROV':
-
+        # if self.hparams.data == 'cifar':
+        #     self.trainset = datasets.CIFAR10(root=self.DATA_ROOT, train=True, download=True, transform=train_transform)
+        #     self.testset = datasets.CIFAR10(root=self.DATA_ROOT, train=False, download=True, transform=test_transform)
+        # elif self.hparams.data == 'imagenet':
+        #     traindir = os.path.join(self.IMAGENET_PATH, 'train')
+        #     valdir = os.path.join(self.IMAGENET_PATH, 'val')
+        #     self.trainset = datasets.ImageFolder(traindir, transform=train_transform)
+        #     self.testset = datasets.ImageFolder(valdir, transform=test_transform)
+        if self.hparams.data == 'ROV':
 
             # not used with new dataset issue fix but can leave in for now
             cfg = {'dataset_path': '/home/ben/data/full_dataset/', #############################
@@ -206,7 +206,8 @@ class BaseSSL(nn.Module):
 
             dataset.preprocessor.pipeline['to_spec'] = melspec_action
             dataset.preprocessor.pipeline['bandpass'] = melspec_bandpass_action
-            print(f'Total number of sample found: {len(dataset)}')
+            dataset.bypass_augmentations = True ### added to stop augs
+            print(f'Total number of train samples found: {len(dataset)}')
             #print(dataset[0].shape)
             self.trainset = dataset
 
@@ -233,7 +234,8 @@ class BaseSSL(nn.Module):
             #batch_sampler=train_batch_sampler,
             collate_fn = collate_audio_samples_to_tensors,   #new
             shuffle = True, #new
-            batch_size = self.hparams.batch_size
+            batch_size = self.hparams.batch_size,
+            drop_last=True ### SET BY BEN
 
         )
         for batch in train_loader:
@@ -305,7 +307,7 @@ class SimCLR(BaseSSL):
         self.criterion = models.losses.NTXent(
             tau=hparams.temperature,
             multiplier=hparams.multiplier,
-            distributed=(hparams.dist == 'ddp'),
+            distributed=(hparams.dist == 'dpp'),
         )
 
     def reset_parameters(self):
@@ -380,21 +382,21 @@ class SimCLR(BaseSSL):
         )
 
     def transforms(self):
-        if self.hparams.data == 'cifar':   ##### not using cifar so this wont get used
-            train_transform = transforms.Compose([
-                transforms.RandomResizedCrop(
-                    32,
-                    scale=(self.hparams.scale_lower, 1.0),
-                    interpolation=PIL.Image.BICUBIC,
-                ),
-                transforms.RandomHorizontalFlip(),
-                datautils.get_color_distortion(s=self.hparams.color_dist_s),
-                transforms.ToTensor(),
-                datautils.Clip(),
-            ])
-            test_transform = train_transform
+        # if self.hparams.data == 'cifar':   ##### not using cifar so this wont get used
+        #     train_transform = transforms.Compose([
+        #         transforms.RandomResizedCrop(
+        #             32,
+        #             scale=(self.hparams.scale_lower, 1.0),
+        #             interpolation=PIL.Image.BICUBIC,
+        #         ),
+        #         transforms.RandomHorizontalFlip(),
+        #         datautils.get_color_distortion(s=self.hparams.color_dist_s),
+        #         transforms.ToTensor(),
+        #         datautils.Clip(),
+        #     ])
+        #     test_transform = train_transform
 
-        elif self.hparams.data == 'imagenet' or self.hparams.data == 'ROV':
+        if self.hparams.data == 'imagenet' or self.hparams.data == 'ROV':
             from utils.datautils import GaussianBlur
 
             im_size = 224
@@ -404,14 +406,15 @@ class SimCLR(BaseSSL):
                     scale=(self.hparams.scale_lower, 1.0),
                     interpolation=PIL.Image.BICUBIC,
                 ),
-                transforms.RandomHorizontalFlip(0.5),
-                datautils.get_color_distortion(s=self.hparams.color_dist_s),
-                transforms.ToTensor(),
-                GaussianBlur(im_size // 10, 0.5),
-                datautils.Clip(),
+               ## transforms.RandomHorizontalFlip(0.5),
+               ## datautils.get_color_distortion(s=self.hparams.color_dist_s),
+               ## transforms.ToTensor(),
+               GaussianBlur(im_size // 10, 0.5),
+               ## datautils.Clip(),
             ])
             ##test_transform = train_transform
-
+        else:
+            print('hparams must = ROV')
         return train_transform##, test_transform
 
     def get_ckpt(self):
@@ -426,335 +429,6 @@ class SimCLR(BaseSSL):
             super().load_state_dict(state)
         else:
             self.model.module.load_state_dict(state)
-
-
-class SSLEval(BaseSSL):
-    @classmethod
-    @BaseSSL.add_parent_hparams
-    def add_model_hparams(cls, parser):
-        parser.add_argument('--test_bs', default=256, type=int)
-        parser.add_argument('--encoder_ckpt', default='', help='Path to the encoder checkpoint')
-        parser.add_argument('--precompute_emb_bs', default=-1, type=int,
-            help='If it\'s not equal to -1 embeddings are precomputed and fixed before training with batch size equal to this.'
-        )
-        parser.add_argument('--finetune', default=False, type=bool, help='Finetunes the encoder if True')
-        parser.add_argument('--augmentation', default='RandomResizedCrop', help='')
-        parser.add_argument('--scale_lower', default=0.08, type=float, help='The minimum scale factor for RandomResizedCrop')
-
-    def __init__(self, hparams, device=None):
-        super().__init__(hparams)
-
-        self.hparams.dist = getattr(self.hparams, 'dist', 'dp')
-
-        if hparams.encoder_ckpt != '':
-            ckpt = torch.load(hparams.encoder_ckpt, map_location=device)
-            if getattr(ckpt['hparams'], 'dist', 'dp') == 'ddp':
-                ckpt['hparams'].dist = 'dp'
-            if self.hparams.dist == 'ddp':
-                ckpt['hparams'].dist = 'gpu:%d' % hparams.gpu
-
-            self.encoder = models.REGISTERED_MODELS[ckpt['hparams'].problem].load(ckpt, device=device)
-        else:
-            print('===> Random encoder is used!!!')
-            self.encoder = SimCLR.default(device=device)
-        self.encoder.to(device)
-
-        if not hparams.finetune:
-            for p in self.encoder.parameters():
-                p.requires_grad = False
-        elif hparams.dist == 'ddp':
-            raise NotImplementedError
-
-        self.encoder.eval()
-        if hparams.data == 'cifar':
-            hdim = self.encode(torch.ones(10, 3, 32, 32).to(device)).shape[1]
-            n_classes = 10
-        elif hparams.data == 'imagenet':
-            hdim = self.encode(torch.ones(10, 3, 224, 224).to(device)).shape[1]
-            n_classes = 1000
-        elif hparams.data == 'ROV':
-            ### we are just sending something to get the hdim (representation) size from the model (i.e throwing away the projection layer)
-            hdim = self.encode(torch.ones(10, 3, 224, 224).to(device)).shape[1]
-            n_classes = 51
-
-        if hparams.arch == 'linear':
-            ### the model we are training is just this small one layer linear model going from representation-->class
-            model = nn.Linear(hdim, n_classes).to(device)
-            model.weight.data.zero_()
-            model.bias.data.zero_()
-            self.model = model
-        else:
-            raise NotImplementedError
-
-        if hparams.dist == 'ddp':
-            self.model = DDP(model, [hparams.gpu])
-
-    def encode(self, x):
-        return self.encoder.model(x, out='h')
-
-    def step(self, batch):
-        if self.hparams.problem == 'eval' and self.hparams.data in ['ROV','imagenet']:
-            batch[0] = batch[0] / 255.
-        h, y = batch
-        if self.hparams.precompute_emb_bs == -1:
-            h = self.encode(h)
-        #### our model is only a linear layer, hence we convert image to representation vector first and then use that to feed into our model (linear layer) to get class
-        p = self.model(h)
-        loss = F.cross_entropy(p, y)
-        acc = (p.argmax(1) == y).float()
-        return {
-            'loss': loss,
-            'acc': acc,
-        }
-
-    def forward(self, *args, **kwargs):
-        return self.model(*args, **kwargs)
-
-    def train_step(self, batch, it=None):
-        logs = self.step(batch)
-        if it is not None:
-            iters_per_epoch = len(self.trainset) / self.hparams.batch_size
-            iters_per_epoch = max(1, int(np.around(iters_per_epoch)))
-            logs['epoch'] = it / iters_per_epoch
-        if self.hparams.dist == 'ddp' and self.hparams.precompute_emb_bs == -1:
-            self.object_trainsampler.set_epoch(it)
-
-        return logs
-
-    def test_step(self, batch):
-        logs = self.step(batch)
-        if self.hparams.dist == 'ddp':
-            utils.gather_metrics(logs)
-        return logs
-
-    def prepare_data(self):
-        super().prepare_data()
-
-        def create_emb_dataset(dataset):
-            embs, labels = [], []
-            loader = torch.utils.data.DataLoader(
-                dataset,
-                num_workers=self.hparams.workers,
-                pin_memory=True,
-                batch_size=self.hparams.precompute_emb_bs,
-                shuffle=False,
-            )
-            for x, y in tqdm(loader):
-                if self.hparams.data == 'imagenet' or self.hparams.data == 'ROV':
-                    x = x.to(torch.device('cuda'))
-                    ### tarun: not sure i have to do this for the ROV data
-                    x = x / 255.
-                e = self.encode(x)
-                embs.append(utils.tonp(e))
-                labels.append(utils.tonp(y))
-            embs, labels = np.concatenate(embs), np.concatenate(labels)
-            dataset = torch.utils.data.TensorDataset(torch.FloatTensor(embs), torch.LongTensor(labels))
-            return dataset
-
-        if self.hparams.precompute_emb_bs != -1:
-            print('===> Precompute embeddings:')
-            assert not self.hparams.aug
-            with torch.no_grad():
-                self.encoder.eval()
-                self.testset = create_emb_dataset(self.testset)
-                self.trainset = create_emb_dataset(self.trainset)
-        
-        print(f'Train size: {len(self.trainset)}')
-        print(f'Test size: {len(self.testset)}')
-
-    def dataloaders(self, iters=None):
-        if self.hparams.dist == 'ddp' and self.hparams.precompute_emb_bs == -1:
-            trainsampler = torch.utils.data.distributed.DistributedSampler(self.trainset)
-            testsampler = torch.utils.data.distributed.DistributedSampler(self.testset, shuffle=False)
-        else:
-            trainsampler = torch.utils.data.RandomSampler(self.trainset)
-            testsampler = torch.utils.data.SequentialSampler(self.testset)
-
-        self.object_trainsampler = trainsampler
-        trainsampler = torch.utils.data.BatchSampler(
-            self.object_trainsampler,
-            batch_size=self.hparams.batch_size, drop_last=False,
-        )
-        if iters is not None:
-            trainsampler = datautils.ContinousSampler(trainsampler, iters)
-
-        train_loader = torch.utils.data.DataLoader(
-            self.trainset,
-            num_workers=self.hparams.workers,
-            pin_memory=True,
-            batch_sampler=trainsampler,
-        )
-
-        ########################################################## comment out
-        test_loader = torch.utils.data.DataLoader(
-            self.testset,
-            num_workers=self.hparams.workers,
-            pin_memory=True,
-            sampler=testsampler,
-            batch_size=self.hparams.test_bs,
-        )
-        return train_loader, test_loader
-
-    def transforms(self):
-        if self.hparams.data == 'cifar':
-            trs = []
-            if 'RandomResizedCrop' in self.hparams.augmentation:
-                trs.append(
-                    transforms.RandomResizedCrop(
-                        32,
-                        scale=(self.hparams.scale_lower, 1.0),
-                        interpolation=PIL.Image.BICUBIC,
-                    )
-                )
-            if 'RandomCrop' in self.hparams.augmentation:
-                trs.append(transforms.RandomCrop(32, padding=4, padding_mode='reflect'))
-            if 'color_distortion' in self.hparams.augmentation:
-                trs.append(datautils.get_color_distortion(self.encoder.hparams.color_dist_s))
-
-            train_transform = transforms.Compose(trs + [
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                datautils.Clip(),
-            ])
-            test_transform = transforms.Compose([
-                transforms.ToTensor(),
-            ])
-        elif self.hparams.data == 'imagenet' or self.hparams.data== 'ROV':
-            train_transform = transforms.Compose([
-                transforms.RandomResizedCrop(
-                    224,
-                    scale=(self.hparams.scale_lower, 1.0),
-                    interpolation=PIL.Image.BICUBIC,
-                ),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                lambda x: (255*x).byte(),
-            ])
-            test_transform = transforms.Compose([
-                datautils.CenterCropAndResize(proportion=0.875, size=224),
-                transforms.ToTensor(),
-                lambda x: (255 * x).byte(),
-            ])
-        return train_transform if self.hparams.aug else test_transform, test_transform
-
-    def train(self, mode=True):
-        if self.hparams.finetune:
-            super().train(mode)
-        else:
-            self.model.train(mode)
-
-    def get_ckpt(self):
-        return {
-            'state_dict': self.state_dict() if self.hparams.finetune else self.model.state_dict(),
-            'hparams': self.hparams,
-        }
-
-    def load_state_dict(self, state):
-        if self.hparams.finetune:
-            super().load_state_dict(state)
-        else:
-            if hasattr(self.model, 'module'):
-                self.model.module.load_state_dict(state)
-            else:
-                self.model.load_state_dict(state)
-
-class SemiSupervisedEval(SSLEval):
-    @classmethod
-    @BaseSSL.add_parent_hparams
-    def add_model_hparams(cls, parser):
-        parser.add_argument('--train_size', default=-1, type=int)
-        parser.add_argument('--data_split_seed', default=42, type=int)
-        parser.add_argument('--n_augs_train', default=-1, type=int)
-        parser.add_argument('--n_augs_test', default=-1, type=int) ######## issue??
-        parser.add_argument('--acc_on_unlabeled', default=False, type=bool)
-
-    def prepare_data(self):
-        super(SSLEval, self).prepare_data()
-
-        if len(self.trainset) != self.hparams.train_size:
-            idxs, unlabeled_idxs = sklearn.model_selection.train_test_split(
-                np.arange(len(self.trainset)),
-                train_size=self.hparams.train_size,
-                random_state=self.hparams.data_split_seed,
-            )
-            if self.hparams.data == 'cifar' or self.hparams.data == 'cifar100':
-                if self.hparams.acc_on_unlabeled:
-                    self.trainset_unlabeled = copy.deepcopy(self.trainset)
-                    self.trainset_unlabeled.data = self.trainset.data[unlabeled_idxs]
-                    self.trainset_unlabeled.targets = np.array(self.trainset.targets)[unlabeled_idxs]
-                    print(f'Test size (0): {len(self.testset)}')
-                    print(f'Unlabeled train size (1):  {len(self.trainset_unlabeled)}')
-
-                self.trainset.data = self.trainset.data[idxs]
-                self.trainset.targets = np.array(self.trainset.targets)[idxs]
-
-                print('Training dataset size:', len(self.trainset))
-            else:
-                assert not self.hparams.acc_on_unlabeled
-                if isinstance(self.trainset, torch.utils.data.TensorDataset):
-                    self.trainset.tensors = [t[idxs] for t in self.trainset.tensors]
-                else:
-                    self.trainset.samples = [self.trainset.samples[i] for i in idxs]
-
-                print('Training dataset size:', len(self.trainset))
-
-        self.encoder.eval()
-        with torch.no_grad():
-            if self.hparams.n_augs_train != -1:
-                self.trainset = EmbEnsEval.create_emb_dataset(self, self.trainset, n_augs=self.hparams.n_augs_train)
-            if self.hparams.n_augs_test != -1:
-                self.testset = EmbEnsEval.create_emb_dataset(self, self.testset, n_augs=self.hparams.n_augs_test)
-                if self.hparams.acc_on_unlabeled:
-                    self.trainset_unlabeled = EmbEnsEval.create_emb_dataset(
-                        self,
-                        self.trainset_unlabeled,
-                        n_augs=self.hparams.n_augs_test
-                    )
-        if self.hparams.acc_on_unlabeled:
-            self.testset = torch.utils.data.ConcatDataset([
-                datautils.DummyOutputWrapper(self.testset, 0),
-                datautils.DummyOutputWrapper(self.trainset_unlabeled, 1)
-            ])
-
-    def transforms(self):
-        ens_train_transfom, ens_test_transform = EmbEnsEval.transforms(self)
-        train_transform, test_transform = SSLEval.transforms(self)
-        return (
-            train_transform if self.hparams.n_augs_train == -1 else ens_train_transfom,
-            test_transform if self.hparams.n_augs_test == -1 else ens_test_transform
-        )
-
-    def step(self, batch, it=None):
-        if self.hparams.problem == 'eval' and self.hparams.data == 'imagenet':
-            batch[0] = batch[0] / 255.
-        h, y = batch
-        if len(h.shape) == 4:
-            h = self.encode(h)
-        p = self.model(h)
-        loss = F.cross_entropy(p, y)
-        acc = (p.argmax(1) == y).float()
-        return {
-            'loss': loss,
-            'acc': acc,
-        }
-
-    def test_step(self, batch):
-        if not self.hparams.acc_on_unlabeled:
-            return super().test_step(batch)
-        # TODO: refactor
-        x, y, d = batch
-        logs = {}
-        keys = set()
-        for didx in [0, 1]:
-            if torch.any(d == didx):
-                t = super().test_step([x[d == didx], y[d == didx]])
-                for k, v in t.items():
-                    keys.add(k)
-                    logs[k + f'_{didx}'] = v
-        for didx in [0, 1]:
-            for k in keys:
-                logs[k + f'_{didx}'] = logs.get(k + f'_{didx}', torch.tensor([]))
-        return logs
 
 
 def configure_optimizers(args, model, cur_iter=-1):
@@ -824,3 +498,342 @@ def configure_optimizers(args, model, cur_iter=-1):
     #     print('Scheduler : ', scheduler)
 
     return optimizer, scheduler
+
+
+# added by ben for now, if uncommenting the below for eval then remove this pass
+class SSLEval:
+    pass
+
+class SemiSupervisedEval(SSLEval):
+    pass
+# SSLEval takes a pretrained encoder, freezes it, and trains a small classifier on top. It's used for evaluation
+# class SSLEval(BaseSSL):
+#     @classmethod
+#     @BaseSSL.add_parent_hparams
+#     def add_model_hparams(cls, parser):
+#         parser.add_argument('--test_bs', default=256, type=int)
+#         parser.add_argument('--encoder_ckpt', default='', help='Path to the encoder checkpoint')
+#         parser.add_argument('--precompute_emb_bs', default=-1, type=int,
+#             help='If it\'s not equal to -1 embeddings are precomputed and fixed before training with batch size equal to this.'
+#         )
+#         parser.add_argument('--finetune', default=False, type=bool, help='Finetunes the encoder if True')
+#         parser.add_argument('--augmentation', default='RandomResizedCrop', help='')
+#         parser.add_argument('--scale_lower', default=0.08, type=float, help='The minimum scale factor for RandomResizedCrop')
+
+#     def __init__(self, hparams, device=None):
+#         super().__init__(hparams)
+
+#         self.hparams.dist = getattr(self.hparams, 'dist', 'dp')
+
+#         if hparams.encoder_ckpt != '':
+#             ckpt = torch.load(hparams.encoder_ckpt, map_location=device)
+#             if getattr(ckpt['hparams'], 'dist', 'dp') == 'ddp':
+#                 ckpt['hparams'].dist = 'dp'
+#             if self.hparams.dist == 'ddp':
+#                 ckpt['hparams'].dist = 'gpu:%d' % hparams.gpu
+
+#             self.encoder = models.REGISTERED_MODELS[ckpt['hparams'].problem].load(ckpt, device=device)
+#         else:
+#             print('===> Random encoder is used!!!')
+#             self.encoder = SimCLR.default(device=device)
+#         self.encoder.to(device)
+
+#         if not hparams.finetune:
+#             for p in self.encoder.parameters():
+#                 p.requires_grad = False
+#         elif hparams.dist == 'ddp':
+#             raise NotImplementedError
+
+#         self.encoder.eval()
+#         if hparams.data == 'cifar':
+#             hdim = self.encode(torch.ones(10, 3, 32, 32).to(device)).shape[1]
+#             n_classes = 10
+#         elif hparams.data == 'imagenet':
+#             hdim = self.encode(torch.ones(10, 3, 224, 224).to(device)).shape[1]
+#             n_classes = 1000
+#         elif hparams.data == 'ROV':
+#             ### we are just sending something to get the hdim (representation) size from the model (i.e throwing away the projection layer)
+#             hdim = self.encode(torch.ones(10, 3, 224, 224).to(device)).shape[1]
+#             n_classes = 51
+
+#         if hparams.arch == 'linear':
+#             ### the model we are training is just this small one layer linear model going from representation-->class
+#             model = nn.Linear(hdim, n_classes).to(device)
+#             model.weight.data.zero_()
+#             model.bias.data.zero_()
+#             self.model = model
+#         else:
+#             raise NotImplementedError
+
+#         if hparams.dist == 'ddp':
+#             self.model = DDP(model, [hparams.gpu])
+
+#     def encode(self, x):
+#         return self.encoder.model(x, out='h')
+
+#     def step(self, batch):
+#         if self.hparams.problem == 'eval' and self.hparams.data in ['ROV','imagenet']:
+#             batch[0] = batch[0] / 255.
+#         h, y = batch
+#         if self.hparams.precompute_emb_bs == -1:
+#             h = self.encode(h)
+#         #### our model is only a linear layer, hence we convert image to representation vector first and then use that to feed into our model (linear layer) to get class
+#         p = self.model(h)
+#         loss = F.cross_entropy(p, y)
+#         acc = (p.argmax(1) == y).float()
+#         return {
+#             'loss': loss,
+#             'acc': acc,
+#         }
+
+#     def forward(self, *args, **kwargs):
+#         return self.model(*args, **kwargs)
+
+#     def train_step(self, batch, it=None):
+#         logs = self.step(batch)
+#         if it is not None:
+#             iters_per_epoch = len(self.trainset) / self.hparams.batch_size
+#             iters_per_epoch = max(1, int(np.around(iters_per_epoch)))
+#             logs['epoch'] = it / iters_per_epoch
+#         if self.hparams.dist == 'ddp' and self.hparams.precompute_emb_bs == -1:
+#             self.object_trainsampler.set_epoch(it)
+
+#         return logs
+
+#     def test_step(self, batch):
+#         logs = self.step(batch)
+#         if self.hparams.dist == 'ddp':
+#             utils.gather_metrics(logs)
+#         return logs
+
+#     def prepare_data(self):
+#         super().prepare_data()
+
+#         def create_emb_dataset(dataset):
+#             embs, labels = [], []
+#             loader = torch.utils.data.DataLoader(
+#                 dataset,
+#                 num_workers=self.hparams.workers,
+#                 pin_memory=True,
+#                 batch_size=self.hparams.precompute_emb_bs,
+#                 shuffle=False,
+#             )
+#             for x, y in tqdm(loader):
+#                 if self.hparams.data == 'imagenet' or self.hparams.data == 'ROV':
+#                     x = x.to(torch.device('cuda'))
+#                     ### tarun: not sure i have to do this for the ROV data
+#                     x = x / 255.
+#                 e = self.encode(x)
+#                 embs.append(utils.tonp(e))
+#                 labels.append(utils.tonp(y))
+#             embs, labels = np.concatenate(embs), np.concatenate(labels)
+#             dataset = torch.utils.data.TensorDataset(torch.FloatTensor(embs), torch.LongTensor(labels))
+#             return dataset
+
+#         if self.hparams.precompute_emb_bs != -1:
+#             print('===> Precompute embeddings:')
+#             assert not self.hparams.aug
+#             with torch.no_grad():
+#                 self.encoder.eval()
+#                 self.testset = create_emb_dataset(self.testset)
+#                 self.trainset = create_emb_dataset(self.trainset)
+        
+#         print(f'Train size: {len(self.trainset)}')
+#         print(f'Test size: {len(self.testset)}')
+
+#     def dataloaders(self, iters=None):
+#         if self.hparams.dist == 'ddp' and self.hparams.precompute_emb_bs == -1:
+#             trainsampler = torch.utils.data.distributed.DistributedSampler(self.trainset)
+#             testsampler = torch.utils.data.distributed.DistributedSampler(self.testset, shuffle=False)
+#         else:
+#             trainsampler = torch.utils.data.RandomSampler(self.trainset)
+#             testsampler = torch.utils.data.SequentialSampler(self.testset)
+
+#         self.object_trainsampler = trainsampler
+#         trainsampler = torch.utils.data.BatchSampler(
+#             self.object_trainsampler,
+#             batch_size=self.hparams.batch_size, drop_last=False,
+#         )
+#         if iters is not None:
+#             trainsampler = datautils.ContinousSampler(trainsampler, iters)
+
+#         train_loader = torch.utils.data.DataLoader(
+#             self.trainset,
+#             num_workers=self.hparams.workers,
+#             pin_memory=True,
+#             batch_sampler=trainsampler,
+#         )
+
+#         ########################################################## comment out
+#         test_loader = torch.utils.data.DataLoader(
+#             self.testset,
+#             num_workers=self.hparams.workers,
+#             pin_memory=True,
+#             sampler=testsampler,
+#             batch_size=self.hparams.test_bs,
+#         )
+#         return train_loader, test_loader
+
+#     def transforms(self):
+#         if self.hparams.data == 'cifar':
+#             trs = []
+#             if 'RandomResizedCrop' in self.hparams.augmentation:
+#                 trs.append(
+#                     transforms.RandomResizedCrop(
+#                         32,
+#                         scale=(self.hparams.scale_lower, 1.0),
+#                         interpolation=PIL.Image.BICUBIC,
+#                     )
+#                 )
+#             if 'RandomCrop' in self.hparams.augmentation:
+#                 trs.append(transforms.RandomCrop(32, padding=4, padding_mode='reflect'))
+#             if 'color_distortion' in self.hparams.augmentation:
+#                 trs.append(datautils.get_color_distortion(self.encoder.hparams.color_dist_s))
+
+#             train_transform = transforms.Compose(trs + [
+#                 transforms.RandomHorizontalFlip(),
+#                 transforms.ToTensor(),
+#                 datautils.Clip(),
+#             ])
+#             test_transform = transforms.Compose([
+#                 transforms.ToTensor(),
+#             ])
+#         elif self.hparams.data == 'imagenet' or self.hparams.data== 'ROV':
+#             train_transform = transforms.Compose([
+#                 transforms.RandomResizedCrop(
+#                     224,
+#                     scale=(self.hparams.scale_lower, 1.0),
+#                     interpolation=PIL.Image.BICUBIC,
+#                 ),
+#                 transforms.RandomHorizontalFlip(),
+#                 transforms.ToTensor(),
+#                 lambda x: (255*x).byte(),
+#             ])
+#             test_transform = transforms.Compose([
+#                 datautils.CenterCropAndResize(proportion=0.875, size=224),
+#                 transforms.ToTensor(),
+#                 lambda x: (255 * x).byte(),
+#             ])
+#         return train_transform if self.hparams.aug else test_transform, test_transform
+
+#     def train(self, mode=True):
+#         if self.hparams.finetune:
+#             super().train(mode)
+#         else:
+#             self.model.train(mode)
+
+#     def get_ckpt(self):
+#         return {
+#             'state_dict': self.state_dict() if self.hparams.finetune else self.model.state_dict(),
+#             'hparams': self.hparams,
+#         }
+
+#     def load_state_dict(self, state):
+#         if self.hparams.finetune:
+#             super().load_state_dict(state)
+#         else:
+#             if hasattr(self.model, 'module'):
+#                 self.model.module.load_state_dict(state)
+#             else:
+#                 self.model.load_state_dict(state)
+
+# class SemiSupervisedEval(SSLEval):
+#     @classmethod
+#     @BaseSSL.add_parent_hparams
+#     def add_model_hparams(cls, parser):
+#         parser.add_argument('--train_size', default=-1, type=int)
+#         parser.add_argument('--data_split_seed', default=42, type=int)
+#         parser.add_argument('--n_augs_train', default=-1, type=int)
+#         parser.add_argument('--n_augs_test', default=-1, type=int) ######## issue??
+#         parser.add_argument('--acc_on_unlabeled', default=False, type=bool)
+
+#     def prepare_data(self):
+#         super(SSLEval, self).prepare_data()
+
+#         if len(self.trainset) != self.hparams.train_size:
+#             idxs, unlabeled_idxs = sklearn.model_selection.train_test_split(
+#                 np.arange(len(self.trainset)),
+#                 train_size=self.hparams.train_size,
+#                 random_state=self.hparams.data_split_seed,
+#             )
+#             if self.hparams.data == 'cifar' or self.hparams.data == 'cifar100':
+#                 if self.hparams.acc_on_unlabeled:
+#                     self.trainset_unlabeled = copy.deepcopy(self.trainset)
+#                     self.trainset_unlabeled.data = self.trainset.data[unlabeled_idxs]
+#                     self.trainset_unlabeled.targets = np.array(self.trainset.targets)[unlabeled_idxs]
+#                     print(f'Test size (0): {len(self.testset)}')
+#                     print(f'Unlabeled train size (1):  {len(self.trainset_unlabeled)}')
+
+#                 self.trainset.data = self.trainset.data[idxs]
+#                 self.trainset.targets = np.array(self.trainset.targets)[idxs]
+
+#                 print('Training dataset size:', len(self.trainset))
+#             else:
+#                 assert not self.hparams.acc_on_unlabeled
+#                 if isinstance(self.trainset, torch.utils.data.TensorDataset):
+#                     self.trainset.tensors = [t[idxs] for t in self.trainset.tensors]
+#                 else:
+#                     self.trainset.samples = [self.trainset.samples[i] for i in idxs]
+
+#                 print('Training dataset size:', len(self.trainset))
+
+#         self.encoder.eval()
+#         with torch.no_grad():
+#             if self.hparams.n_augs_train != -1:
+#                 self.trainset = EmbEnsEval.create_emb_dataset(self, self.trainset, n_augs=self.hparams.n_augs_train)
+#             if self.hparams.n_augs_test != -1:
+#                 self.testset = EmbEnsEval.create_emb_dataset(self, self.testset, n_augs=self.hparams.n_augs_test)
+#                 if self.hparams.acc_on_unlabeled:
+#                     self.trainset_unlabeled = EmbEnsEval.create_emb_dataset(
+#                         self,
+#                         self.trainset_unlabeled,
+#                         n_augs=self.hparams.n_augs_test
+#                     )
+#         if self.hparams.acc_on_unlabeled:
+#             self.testset = torch.utils.data.ConcatDataset([
+#                 datautils.DummyOutputWrapper(self.testset, 0),
+#                 datautils.DummyOutputWrapper(self.trainset_unlabeled, 1)
+#             ])
+
+#     def transforms(self):
+#         ens_train_transfom, ens_test_transform = EmbEnsEval.transforms(self)
+#         train_transform, test_transform = SSLEval.transforms(self)
+#         return (
+#             train_transform if self.hparams.n_augs_train == -1 else ens_train_transfom,
+#             test_transform if self.hparams.n_augs_test == -1 else ens_test_transform
+#         )
+
+#     def step(self, batch, it=None):
+#         if self.hparams.problem == 'eval' and self.hparams.data == 'imagenet':
+#             batch[0] = batch[0] / 255.
+#         h, y = batch
+#         if len(h.shape) == 4:
+#             h = self.encode(h)
+#         p = self.model(h)
+#         loss = F.cross_entropy(p, y)
+#         acc = (p.argmax(1) == y).float()
+#         return {
+#             'loss': loss,
+#             'acc': acc,
+#         }
+
+#     def test_step(self, batch):
+#         if not self.hparams.acc_on_unlabeled:
+#             return super().test_step(batch)
+#         # TODO: refactor
+#         x, y, d = batch
+#         logs = {}
+#         keys = set()
+#         for didx in [0, 1]:
+#             if torch.any(d == didx):
+#                 t = super().test_step([x[d == didx], y[d == didx]])
+#                 for k, v in t.items():
+#                     keys.add(k)
+#                     logs[k + f'_{didx}'] = v
+#         for didx in [0, 1]:
+#             for k in keys:
+#                 logs[k + f'_{didx}'] = logs.get(k + f'_{didx}', torch.tensor([]))
+#         return logs
+
+
+

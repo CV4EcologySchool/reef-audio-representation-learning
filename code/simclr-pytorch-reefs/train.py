@@ -55,7 +55,7 @@ def add_learner_params(parser):
         help='the number of nodes (scripts launched)',
     )
 
-
+# handles distributed training initialization using torch.distributed if needed. - ben
 def main():
     parser = myexman.ExParser(file=os.path.basename(__file__))
     add_learner_params(parser)
@@ -105,7 +105,7 @@ def main():
         print ('done')
         main_worker(args.gpu, -1, args)
 
-
+# the main training loop, running on each GPU process. It loads data, creates the model, optimizer etc. - ben
 def main_worker(gpu, ngpus, args):
     fmt = {
         'train_time': '.3f',
@@ -161,6 +161,7 @@ def main_worker(gpu, ngpus, args):
     continue_training = args.iters != 0
     data_time, it_time = 0, 0
 
+    # effectively a for loop for trianing
     while continue_training:
         train_logs = []
         model.train()

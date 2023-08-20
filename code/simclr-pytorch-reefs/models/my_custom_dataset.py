@@ -1,3 +1,5 @@
+### this script is now redundant as its all run in ssl.py in the dataloader
+
 '''
     PyTorch dataset class for COCO-CT-formatted datasets. Note that you could
     use the official PyTorch MS-COCO wrappers:
