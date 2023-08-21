@@ -1,5 +1,5 @@
 # Ignore data folder
 data/full_dataset
 logs/
-home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/models/__pycache__
+code/simclr-pytorch-reefs/models/__pycache__
 
