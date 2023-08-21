@@ -1,5 +1,5 @@
 # Ignore data folder
 data/full_dataset
 logs/
-code/simclr-pytorch-reefs/models/__pycache__
+code/simclr-pytorch-reefs/models/__pycache__/
 
