@@ -27,11 +27,10 @@ import json
 import pandas as pd
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.datasets import AudioFileDataset
-# helper function for displaying a sample as an image 
+# helper function for displaying a sample as an image
 from opensoundscape.preprocess.utils import show_tensor, show_tensor_grid
 from opensoundscape import Action
 from opensoundscape.spectrogram import MelSpectrogram
-
 
 
 
@@ -132,24 +131,7 @@ class BaseSSL(nn.Module):
 
     def prepare_data(self):
         ##self.trainset = dataset
-        train_transform = self.transforms()#, test_transform = self.transforms() ### comment out later??
-
-        if self.hparams.data == 'ROV':
-            # not used with new dataset issue fix but can leave in for now
-            cfg = {'data_path': '/mnt/ssd-cluster/ben/data/full_dataset/', #############################
-                'json_path': '/home/ben/reef-audio-representation-learning/data/dataset.json'}#### tarun : for pretraining self.trainset is the unlabeled dataset.
-            print(f'Dataset path:')
-            print(cfg['data_path'])
-
-            self.trainset = CTDataset(cfg, split='train_data', transform=train_transform)
-            #### tarun : for eval or finetuning,self.trainset is the 10percent train dataset
-            #self.trainset = CTDataset(cfg, split='train', transform=train_transform)
-            #self.testset = CTDataset(cfg, split='val', transform=test_transform)
-
-        else:
-            raise NotImplementedError
-        print(f'Number of training data samples: {len(self.trainset)}')
-        
+        ##train_transform, test_transform = self.transforms() ### comment out later??
         # print('The following train transform is used:\n', train_transform)
         # print('The following test transform is used:\n', test_transform)
         # if self.hparams.data == 'cifar':
@@ -160,83 +142,75 @@ class BaseSSL(nn.Module):
         #     valdir = os.path.join(self.IMAGENET_PATH, 'val')
         #     self.trainset = datasets.ImageFolder(traindir, transform=train_transform)
         #     self.testset = datasets.ImageFolder(valdir, transform=test_transform)
-        
-        
-        
-        
- ##############################################     
-        
-        # if self.hparams.data == 'ROV':
+        if self.hparams.data == 'ROV':
 
-        #     # not used with new dataset issue fix but can leave in for now
-        #     cfg = {'dataset_path': '/home/ben/data/full_dataset/', #############################
-        #         'json_path': '/home/ben/data/dataset.json'}
+            # not used with new dataset issue fix but can leave in for now
+            cfg = {'dataset_path': '/home/ben/data/full_dataset/', #############################
+                'json_path': '/home/ben/data/dataset.json'}
 
-        #     #cfg = {'data_root':'/root/all_ROV_crops_with_unknown/all_ROV_crops_with_unknown', 'train_label_file':'../10_percent_train_with_unknown.csv', 'val_label_file':'../5_percent_val_with_unknown.csv', 'test_label_file':'../10_percent_test_with_unknown.csv', 'unlabeled_file':'../75_percent_unlabeled_with_unknown.csv'}
-        #     #### tarun : for pretraining self.trainset is the unlabeled dataset.
+            #cfg = {'data_root':'/root/all_ROV_crops_with_unknown/all_ROV_crops_with_unknown', 'train_label_file':'../10_percent_train_with_unknown.csv', 'val_label_file':'../5_percent_val_with_unknown.csv', 'test_label_file':'../10_percent_test_with_unknown.csv', 'unlabeled_file':'../75_percent_unlabeled_with_unknown.csv'}
+            #### tarun : for pretraining self.trainset is the unlabeled dataset.
             
                 
-        #     #self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform) ##################################
+            #self.trainset = CTDataset(**cfg)#, split='unlabeled', transform=train_transform) ##################################
+            #################################################
+            # fixing dataset issue we add a load of load of code here to preprocess data and make train.dataset
+            # Load the JSON data from the file
+            json_path = '/home/ben/reef-audio-representation-learning/data/dataset.json'
+            dataset_path = '/mnt/ssd-cluster/ben/data/full_dataset/'
+            with open(json_path, "r") as file:
+                data = json.load(file)
+
+            # Extract the list of dictionaries from the "audio" key
+            audio_data = data.get("audio", [])
+
+            # Filter the list to only include entries where data_type = "train_data"
+            data = [entry for entry in audio_data if entry.get("data_type") == "train_data"]
+
+            # Convert the filtered list into a DataFrame
+            #df = pd.DataFrame(self.data)
+            df = pd.DataFrame(data)#[:32]) to rig dataset size for testing
+
+            # Convert the list of dictionaries (which is the value of the main dictionary) into a DataFrame
+            #df = pd.DataFrame(data[list(data.keys())[0]])
+            #self.data = {k: v for k, v in data.items() if v.get("data_type") == "train_data"}
+            #df = pd.DataFrame(self.data[list(self.data.keys())[0]])
+
+
+            # Create a dataframe with just file_path and a class column (req for AudioFileDataset)
+            transformed_df = df[['file_name', 'class']].copy()
+
+            # rename 'file_name' column to 'file'
+            transformed_df.rename(columns={'file_name': 'file'}, inplace=True)
+
+            # set file to be the index for AudioFileDataset
+            transformed_df.set_index('file', inplace=True)
+
+            # set all classes to 1 as AudioFileDataset requires class
+            transformed_df['class'] = 1
+
+            # append dataset_path to start of file_name column
+            transformed_df.index = dataset_path + transformed_df.index
+            #transformed_df.head() # for notebook
+
+            # initialize the preprocessor (forget what this does?)
+            pre = SpectrogramPreprocessor(sample_duration=1.92)
+
+            # initialize the dataset
+            dataset = AudioFileDataset(transformed_df, pre)
+
+            # change the bandpass from the default to 8kHz
+            dataset.preprocessor.pipeline.bandpass.set(min_f=0,max_f=8000)
             
-            
-        #     #################################################
-        #     # fixing dataset issue we add a load of load of code here to preprocess data and make train.dataset
-        #     # Load the JSON data from the file
-        #     json_path = '/home/ben/reef-audio-representation-learning/data/dataset.json'
-        #     dataset_path = '/mnt/ssd-cluster/ben/data/full_dataset/'
-        #     with open(json_path, "r") as file:
-        #         data = json.load(file)
+            melspec_action = Action(_my_melspec)
+            melspec_bandpass_action = Action(MelSpectrogram.bandpass, min_f=0, max_f=8000)
 
-        #     # Extract the list of dictionaries from the "audio" key
-        #     audio_data = data.get("audio", [])
-
-        #     # Filter the list to only include entries where data_type = "train_data"
-        #     data = [entry for entry in audio_data if entry.get("data_type") == "train_data"]
-
-        #     # Convert the filtered list into a DataFrame
-        #     #df = pd.DataFrame(self.data)
-        #     df = pd.DataFrame(data)#[:32]) to rig dataset size for testing
-
-        #     # Convert the list of dictionaries (which is the value of the main dictionary) into a DataFrame
-        #     #df = pd.DataFrame(data[list(data.keys())[0]])
-        #     #self.data = {k: v for k, v in data.items() if v.get("data_type") == "train_data"}
-        #     #df = pd.DataFrame(self.data[list(self.data.keys())[0]])
-
-
-        #     # Create a dataframe with just file_path and a class column (req for AudioFileDataset)
-        #     transformed_df = df[['file_name', 'class']].copy()
-
-        #     # rename 'file_name' column to 'file'
-        #     transformed_df.rename(columns={'file_name': 'file'}, inplace=True)
-
-        #     # set file to be the index for AudioFileDataset
-        #     transformed_df.set_index('file', inplace=True)
-
-        #     # set all classes to 1 as AudioFileDataset requires class
-        #     transformed_df['class'] = 1
-
-        #     # append dataset_path to start of file_name column
-        #     transformed_df.index = dataset_path + transformed_df.index
-        #     #transformed_df.head() # for notebook
-
-        #     # initialize the preprocessor (forget what this does?)
-        #     pre = SpectrogramPreprocessor(sample_duration=1.92)
-
-        #     # initialize the dataset
-        #     dataset = AudioFileDataset(transformed_df, pre)
-
-        #     # change the bandpass from the default to 8kHz
-        #     dataset.preprocessor.pipeline.bandpass.set(min_f=0,max_f=8000)
-            
-        #     melspec_action = Action(_my_melspec)
-        #     melspec_bandpass_action = Action(MelSpectrogram.bandpass, min_f=0, max_f=8000)
-
-        #     dataset.preprocessor.pipeline['to_spec'] = melspec_action
-        #     dataset.preprocessor.pipeline['bandpass'] = melspec_bandpass_action
-        #     dataset.bypass_augmentations = True ### added to stop augs
-        #     print(f'Total number of train samples found: {len(dataset)}')
-        #     #print(dataset[0].shape)
-        #     self.trainset = dataset
+            dataset.preprocessor.pipeline['to_spec'] = melspec_action
+            dataset.preprocessor.pipeline['bandpass'] = melspec_bandpass_action
+            dataset.bypass_augmentations = True ### added to stop augs
+            print(f'Total number of train samples found: {len(dataset)}')
+            #print(dataset[0].shape)
+            self.trainset = dataset
 
     
             ##############################################
@@ -244,13 +218,8 @@ class BaseSSL(nn.Module):
             #### tarun : for eval or finetuning,self.trainset is the 10percent train dataset
             #self.trainset = CTDataset(cfg, split='train', transform=train_transform)
             ##self.testset = CTDataset(cfg, split='val', transform=test_transform)
-        # else:
-        #     raise NotImplementedError
-####################################
-
-
-
-
+        else:
+            raise NotImplementedError
 
     def dataloaders(self, iters=None):
         train_batch_sampler = self.samplers()#, test_batch_sampler = self.samplers()
@@ -432,19 +401,16 @@ class SimCLR(BaseSSL):
             from utils.datautils import GaussianBlur
 
             im_size = 224
-            # could put my transformation code in here? should i??
-            
-            # note in my_custom_dataset.py this is currently written over, so these transforms arent used
             train_transform = transforms.Compose([
                 transforms.RandomResizedCrop(
                     im_size,
                     scale=(self.hparams.scale_lower, 1.0),
                     interpolation=PIL.Image.BICUBIC,
                 ),
-               transforms.RandomHorizontalFlip(0.5),
+               ## transforms.RandomHorizontalFlip(0.5),
                ## datautils.get_color_distortion(s=self.hparams.color_dist_s),
                ## transforms.ToTensor(),
-               #GaussianBlur(im_size // 10, 0.5),
+               GaussianBlur(im_size // 10, 0.5),
                ## datautils.Clip(),
             ])
             ##test_transform = train_transform
