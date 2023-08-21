@@ -100,6 +100,7 @@ class BaseSSL(nn.Module):
             'state_dict': self.state_dict(),
             'hparams': self.hparams,
         }
+        
 
     @classmethod
     def load(cls, ckpt, device=None):
@@ -155,8 +156,8 @@ class BaseSSL(nn.Module):
             #################################################
             # fixing dataset issue we add a load of load of code here to preprocess data and make train.dataset
             # Load the JSON data from the file
-            json_path = '/home/ben/data/dataset.json'
-            dataset_path = '/home/ben/data/full_dataset/'
+            json_path = '/home/ben/reef-audio-representation-learning/data/dataset.json'
+            dataset_path = '/mnt/ssd-cluster/ben/data/full_dataset/'
             with open(json_path, "r") as file:
                 data = json.load(file)
 

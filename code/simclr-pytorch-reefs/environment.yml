@@ -1,4 +1,4 @@
-name: simclr_pytorch_reefs_new
+name: simclr_pytorch_reefs
 channels:
   - pytorch
   - defaults
