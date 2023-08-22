@@ -1,6 +1,6 @@
 arch: ResNet50
 aug: true  ############## think ob this!!
-batch_size: 1024  # Hit OOM on 2048, 1024 mostly runs but occasionally gives core dump
+batch_size: 512  # Two batches are made, so this will be x2 
 ckpt: ''
 color_dist_s: 1.0
 config_file: ''
@@ -9,7 +9,7 @@ dist: dp
 dist_address: '198.176.97.113' # changed to bens remote machine
 eval_freq: 30
 gpu: 1 ################# changed from 0 
-iters: 5273 # num batches seen, not epochs! So 1 epoch. 54000/512 = 105.5 iters per epoch
+iters: 5312 # num batches seen, not epochs! So 1 epoch. 54000/512 = 105.5 iters per epoch
 log_freq: 5
 lr: 0.5  # was 0.6
 lr_schedule: warmup-anneal

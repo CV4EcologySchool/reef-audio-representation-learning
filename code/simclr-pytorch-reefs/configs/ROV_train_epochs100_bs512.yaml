@@ -1,6 +1,6 @@
 arch: ResNet50
 aug: true
-batch_size: 1024  ###################################
+batch_size: 512  ###################################
 ckpt: ''
 color_dist_s: 1.0
 config_file: ''
@@ -9,7 +9,7 @@ dist: dp
 dist_address: '198.176.97.113' #'127.0.0.1:1234' ############# changed to bens remote machine
 eval_freq: 30
 gpu: 1 ################# changed from 0 
-iters: 2600 # num batches seen, not epochs!
+iters: 5000 # num batches seen, not epochs!
 log_freq: 5
 lr: 0.6
 lr_schedule: warmup-anneal

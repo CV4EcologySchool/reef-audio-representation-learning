@@ -25,57 +25,57 @@ import copy
 # added by ben
 import json
 import pandas as pd
-from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.ml.datasets import AudioFileDataset
-# helper function for displaying a sample as an image 
-from opensoundscape.preprocess.utils import show_tensor, show_tensor_grid
-from opensoundscape import Action
-from opensoundscape.spectrogram import MelSpectrogram
+# from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
+# from opensoundscape.ml.datasets import AudioFileDataset
+# # helper function for displaying a sample as an image 
+# from opensoundscape.preprocess.utils import show_tensor, show_tensor_grid
+# from opensoundscape import Action
+# from opensoundscape.spectrogram import MelSpectrogram
 
 
 
 
-##################
-def _melspec_linear_to_db(melspec):
+################## bin all these functions, not used I think
+# def _melspec_linear_to_db(melspec):
     
-    # because there's an underflow error during MelSpectrogram.from_audio() with dB_scale = True,
-    # we instead perform dB scaling afterwards
-    # which for some mysterious reason works
+#     # because there's an underflow error during MelSpectrogram.from_audio() with dB_scale = True,
+#     # we instead perform dB scaling afterwards
+#     # which for some mysterious reason works
     
-    melspectrogram = 10 * np.log10(
-                    melspec.spectrogram,
-                    where=melspec.spectrogram > 0,
-                    out=np.full(melspec.spectrogram.shape, -np.inf),)
+#     melspectrogram = 10 * np.log10(
+#                     melspec.spectrogram,
+#                     where=melspec.spectrogram > 0,
+#                     out=np.full(melspec.spectrogram.shape, -np.inf),)
 
-    # limit the decibel range (-100 to -20 dB by default)
-    # values below lower limit set to lower limit,
-    # values above upper limit set to uper limit
-    min_db, max_db = melspec.decibel_limits
-    melspectrogram[melspectrogram > max_db] = max_db
-    melspectrogram[melspectrogram < min_db] = min_db
+#     # limit the decibel range (-100 to -20 dB by default)
+#     # values below lower limit set to lower limit,
+#     # values above upper limit set to uper limit
+#     min_db, max_db = melspec.decibel_limits
+#     melspectrogram[melspectrogram > max_db] = max_db
+#     melspectrogram[melspectrogram < min_db] = min_db
 
-    return MelSpectrogram(times=melspec.times,
-                        frequencies=melspec.frequencies,
-                        spectrogram=melspectrogram,
-                        decibel_limits=melspec.decibel_limits,                   
-    )
+#     return MelSpectrogram(times=melspec.times,
+#                         frequencies=melspec.frequencies,
+#                         spectrogram=melspectrogram,
+#                         decibel_limits=melspec.decibel_limits,                   
+#     )
 
-def _my_melspec(audio):
-    melspec_linear = MelSpectrogram.from_audio(audio,dB_scale=False, window_samples = 512) #adjust params, use MelSpectrogram.from_audio to see what these are
-    melspec_db = _melspec_linear_to_db(melspec_linear)
-    return melspec_db
+# def _my_melspec(audio):
+#     melspec_linear = MelSpectrogram.from_audio(audio,dB_scale=False, window_samples = 512) #adjust params, use MelSpectrogram.from_audio to see what these are
+#     melspec_db = _melspec_linear_to_db(melspec_linear)
+#     return melspec_db
 
-def collate_audio_samples_to_tensors(batch):
-    """
-    takes a list of AudioSample objects, returns:
-        (Tensor of stacked AudioSample.data, Tensor of stacked AudioSample.label.values)
+# def collate_audio_samples_to_tensors(batch):
+#     """
+#     takes a list of AudioSample objects, returns:
+#         (Tensor of stacked AudioSample.data, Tensor of stacked AudioSample.label.values)
     
-    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset) 
-    but want the traditional output of PyTorch Dataloaders
-    """
-    tensors = torch.stack([i.data for i in batch])
-    #labels =  torch.tensor([i.labels.tolist() for i in batch])
-    return tensors #, labels
+#     use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset) 
+#     but want the traditional output of PyTorch Dataloaders
+#     """
+#     tensors = torch.stack([i.data for i in batch])
+#     #labels =  torch.tensor([i.labels.tolist() for i in batch])
+#     return tensors #, labels
 
 ##################    
 
@@ -132,6 +132,7 @@ class BaseSSL(nn.Module):
 
     def prepare_data(self):
         ##self.trainset = dataset
+        # TRANSFORMS CURRENTLY OVERWRITTEN in custom_dataset.py, kpet here to satisy args of other functions
         train_transform = self.transforms()#, test_transform = self.transforms() ### comment out later??
 
         if self.hparams.data == 'ROV':
@@ -254,20 +255,21 @@ class BaseSSL(nn.Module):
 
     def dataloaders(self, iters=None):
         train_batch_sampler = self.samplers()#, test_batch_sampler = self.samplers()
-        # if iters is not None:
-        #     train_batch_sampler = datautils.ContinousSampler(
-        #         train_batch_sampler,
-        #         iters
-        #     )
+        if iters is not None:
+            train_batch_sampler = datautils.ContinousSampler(
+                train_batch_sampler,
+                iters
+            )
         train_loader = torch.utils.data.DataLoader(
             self.trainset,
             num_workers=self.hparams.workers,
             pin_memory=True,
-            #batch_sampler=train_batch_sampler,
-            collate_fn = collate_audio_samples_to_tensors,   #new
-            shuffle = True, #new
-            batch_size = self.hparams.batch_size,
-            drop_last=True ### SET BY BEN
+            #batch_size = self.hparams.batch_size,
+            #collate_fn = collate_audio_samples_to_tensors, #new
+            #shuffle = True, # comment out, batch_sampler handles this
+            #drop_last=True, # comment out,  batch_sampler handles this
+
+            batch_sampler = train_batch_sampler
 
         )
         for batch in train_loader:
@@ -408,10 +410,8 @@ class SimCLR(BaseSSL):
         self.trainsampler = trainsampler
         self.batch_trainsampler = batch_sampler(trainsampler, self.hparams.batch_size, drop_last=True)
 
-        return (
-            self.batch_trainsampler,
-            ##batch_sampler(testsampler, self.hparams.batch_size, drop_last=True)
-        )
+        return self.batch_trainsampler
+        
 
     def transforms(self):
         # if self.hparams.data == 'cifar':   ##### not using cifar so this wont get used

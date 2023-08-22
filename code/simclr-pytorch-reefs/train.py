@@ -136,7 +136,7 @@ def main_worker(gpu, ngpus, args):
 
         print(f'===> Proc {dist.get_rank()}/{dist.get_world_size()}@{socket.gethostname()}', flush=True)
 
-    # create model
+    # create model, specified by yaml which specifices sim-clr, which is called in the models 
     model = models.REGISTERED_MODELS[args.problem](args, device=device)
 
     if args.ckpt != '':

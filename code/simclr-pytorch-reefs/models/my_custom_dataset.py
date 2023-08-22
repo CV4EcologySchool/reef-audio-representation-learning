@@ -66,7 +66,7 @@ class CTDataset(Dataset):
                     if entry["data_type"] == split:
                         path = entry["file_name"]
                         label = entry["class"]
-                        self.data.append((path, label))
+                        self.data.append([path, label]) ###chNGED TO LIST 
 
     def __len__(self):
         '''
@@ -79,6 +79,8 @@ class CTDataset(Dataset):
             Returns a single data point at given idx.
             Here's where we actually load the audio and get the Mel spectrogram.
         '''
+        #print(f'shape of id: {type(idx)}')
+        #print(idx)
         audio_path, label = self.data[idx]
 
         # load audio and get Mel spectrogram
