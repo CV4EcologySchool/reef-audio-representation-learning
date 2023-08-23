@@ -133,7 +133,7 @@ class BaseSSL(nn.Module):
     def prepare_data(self):
         ##self.trainset = dataset
         # TRANSFORMS CURRENTLY OVERWRITTEN in custom_dataset.py, kpet here to satisy args of other functions
-        train_transform = self.transforms()#, test_transform = self.transforms() ### comment out later??
+        #train_transform = self.transforms()#, test_transform = self.transforms() ### comment out later??
 
         if self.hparams.data == 'ROV':
             # not used with new dataset issue fix but can leave in for now
@@ -142,7 +142,8 @@ class BaseSSL(nn.Module):
             print(f'Dataset path:')
             print(cfg['data_path'])
 
-            self.trainset = CTDataset(cfg, split='train_data', transform=train_transform)
+            self.trainset = CTDataset(cfg, split='train_data', transform=True)
+            
             #### tarun : for eval or finetuning,self.trainset is the 10percent train dataset
             #self.trainset = CTDataset(cfg, split='train', transform=train_transform)
             #self.testset = CTDataset(cfg, split='val', transform=test_transform)

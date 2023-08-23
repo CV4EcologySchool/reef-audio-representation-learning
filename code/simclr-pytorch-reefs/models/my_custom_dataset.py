@@ -32,11 +32,19 @@ augment_raw_audio = Compose(
 )
 
 # Modify the load_audio_and_get_mel_spectrogram function:
-def load_audio_and_get_mel_spectrogram(filename, sr=8000, n_mels=128, n_fft=1024, hop_length=64, win_length=512):
+def mel_spectrogram_func(filename, augment, sr=8000, n_mels=128, n_fft=1024, hop_length=64, win_length=512):
     y, _ = librosa.load(filename, sr=sr)
-    augmented_signal = augment_raw_audio(y, sr)
 
-    mel_spectrogram = librosa.feature.melspectrogram(y=augmented_signal, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, win_length=win_length)
+    # apply transformations for train data if True, not for test data if False
+    if augment ==True:
+        # pass to augmentation function first then pass to mel spec below
+        audio_signal = augment_raw_audio(y, sr)
+    else:
+        # skip right to mel spec below
+        audio_signal = y
+
+    # compute the Mel spectrogram
+    mel_spectrogram = librosa.feature.melspectrogram(y=audio_signal, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length, win_length=win_length)
     mel_spectrogram_resized = resize_mel_spectrogram(mel_spectrogram)
     return mel_spectrogram_resized
 
@@ -84,8 +92,16 @@ class CTDataset(Dataset):
         audio_path, label = self.data[idx]
 
         # load audio and get Mel spectrogram
-        mel_spectrogram = load_audio_and_get_mel_spectrogram(os.path.join(self.data_root, audio_path))
+        if self.transform == True:
+            mel_spectrogram = mel_spectrogram_func(filename = os.path.join(self.data_root, audio_path), augment = True)
+        elif self.transform == False:
+            mel_spectrogram = mel_spectrogram_func(filename = os.path.join(self.data_root, audio_path), augment = False)
 
+        else:
+            raise ValueError("The 'transform' parameter must be either True or False.")
+
+            
+        
         # make 3 dimensions, so shape goes from [x, y] to [3, x, y]
         mel_spectrogram_tensor = torch.tensor(mel_spectrogram).unsqueeze(0).repeat(3, 1, 1).float()
         
