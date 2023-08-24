@@ -3,8 +3,8 @@
 # In Python, this is all read as a dict.
 
 # selecting dataset
-test_dataset: test_florida
-num_classes: 2 # all are 2, excpet bermuda = 1. 
+test_dataset: test_kenya
+num_classes: 2 # all are 2, excpet bermuda = 7. 
 train_percent: 0.2 # change for dataset
 
 #ReefCLR or Imagenet wights? If starting_weights: None, it defaults to imagenet. If path to a checkpoint then ReefCLR
@@ -16,8 +16,8 @@ data_path: /mnt/ssd-cluster/ben/data/full_dataset/
 json_path: /home/ben/reef-audio-representation-learning/data/dataset.json
 
 # Hyper parameters
-num_epochs: 20
-batch_size: 64
+num_epochs: 2
+batch_size: 128
 learning_rate: 0.001
 weight_decay: 0.001
 
