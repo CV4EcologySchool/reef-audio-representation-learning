@@ -2,7 +2,7 @@
 #    the label as well as the tensor. Could streamline this by editing that original file to do this if its testing but
 #    and not if its training, but being lazy for now and just making a whole new script.
 
-
+import torch
 import os
 import json
 import librosa
@@ -69,37 +69,55 @@ class CTDataset_train(Dataset):
         self.transform = transform
         self.train_percent = train_percent
 
+        # REMEMBER! there are 2 classes, so any changes should be made to both
 
         # index data from JSON file
         self.data = []
         with open(cfg['json_path'], 'r') as f:
             json_data = json.load(f)
 
-            # gather class labels in the json file
+            # Select only test_data and only from the right task (e.g australia)
+            filtered_audio = [entry for entry in json_data['audio'] if entry["data_type"] == split and entry["dataset"] == self.dataset]
+
+            # Now overwrite the 'audio' key in json_data with the filtered entries
+            json_data['audio'] = filtered_audio
+
+            # Now get all the classes in the filtered data json            
             class_labels = set([obj['class'] for obj in json_data['audio']])
 
-            # map class labels to integers
+            # Set a map that maps the class labels to integers
             class_map = {class_label: i for i, class_label in enumerate(class_labels)}
 
+            # now append file paths and class label to self.data
             for sublist in json_data.values():
                 for entry in sublist:
-                    #print(entry)
+                    path = entry["file_name"]
+                    label = class_map[entry["class"]]#entry["class"]
+                    self.data.append([path, label]) ###chNGED TO LIST
 
-                    if entry["data_type"] == split and entry["dataset"] == self.dataset:
-                        path = entry["file_name"]
-                        label = class_map[entry["class"]]#entry["class"]
-                        self.data.append([path, label]) ###chNGED TO LIST
+            # Split data by classes
+            data_by_class = {}
+            for path, label in self.data:
+                if label not in data_by_class:
+                    data_by_class[label] = []
+                data_by_class[label].append([path, label])
 
-        # shuffle data
-        np.random.shuffle(self.data) # uses seed set oin train_eval.py
+            # Sample according to train_percent and create training and testing lists
+            train_data = []
+            test_data = []
+            for label, entries in data_by_class.items():
 
-        # split data into train and test
-        # if this is train take the first 0.2 # but this will do this for every single sample ?
-        train_size = int(self.train_percent * len(self.data))
+                # get length of the entries in this class, find train_precent * this len to be used in the split
+                n_train = int(len(entries) * train_percent)
 
-        # take all data after the split for testing
-        self.data = self.data[:train_size]
+                # now do the split, we'll only take test data for this class
+                train_data.extend(entries[:n_train])
+                test_data.extend(entries[n_train:])
 
+        # shuffle data, fine as its already split
+        np.random.seed(0)
+        np.random.shuffle(train_data) # uses seed set in train_eval.py
+        self.data = train_data
 
     def __len__(self):
         '''
@@ -153,38 +171,55 @@ class CTDataset_test(Dataset):
         self.transform = transform
         self.train_percent = train_percent
 
+        # REMEMBER! there are 2 classes, so any changes should be made to both
 
         # index data from JSON file
         self.data = []
         with open(cfg['json_path'], 'r') as f:
             json_data = json.load(f)
 
-            # gather class labels in the json file
+            # Select only test_data and only from the right task (e.g australia)
+            filtered_audio = [entry for entry in json_data['audio'] if entry["data_type"] == split and entry["dataset"] == self.dataset]
+
+            # Now overwrite the 'audio' key in json_data with the filtered entries
+            json_data['audio'] = filtered_audio
+
+            # Now get all the classes in the filtered data json            
             class_labels = set([obj['class'] for obj in json_data['audio']])
 
-            # map class labels to integers
+            # Set a map that maps the class labels to integers
             class_map = {class_label: i for i, class_label in enumerate(class_labels)}
 
+            # now append file paths and class label to self.data
             for sublist in json_data.values():
                 for entry in sublist:
-                    #print(entry)
+                    path = entry["file_name"]
+                    label = class_map[entry["class"]]#entry["class"]
+                    self.data.append([path, label]) ###chNGED TO LIST
 
-                    if entry["data_type"] == split and entry["dataset"] == self.dataset:
-                        path = entry["file_name"]
-                        label = class_map[entry["class"]]#entry["class"]
-                        self.data.append([path, label]) ###chNGED TO LIST
+            # Split data by classes
+            data_by_class = {}
+            for path, label in self.data:
+                if label not in data_by_class:
+                    data_by_class[label] = []
+                data_by_class[label].append([path, label])
 
-        # shuffle data
-        np.random.shuffle(self.data) # uses seed set oin train_eval.py
+            # Sample according to train_percent and create training and testing lists
+            train_data = []
+            test_data = []
+            for label, entries in data_by_class.items():
 
-        # split data into train and test
-        # if this is train take the first 0.2 # but this will do this for every single sample ?
-        train_size = int(self.train_percent * len(self.data))
+                # get length of the entries in this class, find train_precent * this len to be used in the split
+                n_train = int(len(entries) * train_percent)
 
-        # take all data after the split for testing
-        self.data = self.data[train_size:]
+                # now do the split, we'll only take test data for this class
+                train_data.extend(entries[:n_train])
+                test_data.extend(entries[n_train:])
 
-
+        # shuffle data, fine as its already split
+        np.random.seed(0)
+        np.random.shuffle(test_data) # uses seed set in train_eval.py
+        self.data = test_data
     def __len__(self):
         '''
             Returns the length of the dataset.
@@ -196,8 +231,7 @@ class CTDataset_test(Dataset):
             Returns a single data point at given idx.
             Here's where we actually load the audio and get the Mel spectrogram.
         '''
-        #print(f'shape of id: {type(idx)}')
-        #print(idx)
+
         audio_path, label = self.data[idx]
 
         # load audio and get Mel spectrogram
@@ -210,7 +244,6 @@ class CTDataset_test(Dataset):
             raise ValueError("The 'transform' parameter must be either True or False.")
 
             
-        
         # make 3 dimensions, so shape goes from [x, y] to [3, x, y]
         mel_spectrogram_tensor = torch.tensor(mel_spectrogram).unsqueeze(0).repeat(3, 1, 1).float()
         

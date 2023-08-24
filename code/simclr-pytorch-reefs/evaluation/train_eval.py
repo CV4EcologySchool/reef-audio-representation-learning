@@ -67,8 +67,8 @@ def load_model(cfg):
         Creates a model instance and loads the latest model state weights.
     '''
     #model_instance = CustomResNet18(cfg['num_classes'])         # create an object instance of our CustomResNet18 class
-    model_instance = CustomResNet50(cfg['num_classes'])         # create an object instance of our CustomResNet18 class
-    #model_instance = SimClrPytorchResNet50(cfg['num_classes'])
+    #model_instance = CustomResNet50(cfg['num_classes'])         # create an object instance of our CustomResNet18 class
+    model_instance = SimClrPytorchResNet50(cfg['num_classes'])
     #model_instance = PAWSResNet50(cfg['num_classes'])
     
     # load latest model state
@@ -130,6 +130,8 @@ def load_pretrained_weights(cfg, model):
 
 def load_pretrained_weights_PAWS(cfg, model):
     checkpoint = torch.load(cfg['starting_weights'], map_location='cpu')
+    #pretrained_dict = {k.replace('module.', ''): v for k, v in checkpoint['encoder'].items()}
+
     pretrained_dict = {k.replace('module.', ''): v for k, v in checkpoint['encoder'].items()}
     new_dict = model.state_dict()
     
@@ -238,7 +240,11 @@ def train(cfg, dataLoader, model, optimizer, class_weights_train):
         oa = torch.mean((pred_label == labels).float()) # OA: number of correct predictions divided by batch size (i.e., average/mean)
         oa_total += oa.item()
 
-        f1 += f1_score(labels.cpu(), pred_label.cpu())
+        # if num classes is >2 we want wegithed f1 score, otherwise binary
+        if cfg['num_classes'] > 2:
+            f1 += f1_score(labels.cpu(), pred_label.cpu(), average='weighted')
+        else:
+            f1 += f1_score(labels.cpu(), pred_label.cpu(), average='binary')
 
         progressBar.set_description(
             '[Train] Loss: {:.2f}; OA: {:.2f}%'.format(
@@ -277,7 +283,7 @@ def validate(cfg, dataLoader, model, class_weights_val):
     criterion = nn.CrossEntropyLoss()   # we still need a criterion to calculate the validation loss
     
     # running averages
-    loss_total, oa_total, f1 = 0.0, 0.0, 0,0     # for now, we just log the loss and overall accuracy (OA)
+    loss_total, oa_total, f1 = 0.0, 0.0, 0.0     # for now, we just log the loss and overall accuracy (OA)
 
     all_predicted_labels = []
     all_ground_truth_labels = []
@@ -306,7 +312,11 @@ def validate(cfg, dataLoader, model, class_weights_val):
             oa = torch.mean((pred_label == labels).float())
             oa_total += oa.item()
 
-            f1 += f1_score(labels.cpu(), pred_label.cpu())
+            # if num classes is >2 we want wegithed f1 score, otherwise binary
+            if cfg['num_classes'] > 2:
+                f1 += f1_score(labels.cpu(), pred_label.cpu(), average='weighted')
+            else:
+                f1 += f1_score(labels.cpu(), pred_label.cpu(), average='binary')
 
             progressBar.set_description(
                 '[Val ] Loss: {:.2f}; OA: {:.2f}%'.format(
@@ -332,7 +342,7 @@ def main():
     # Argument parser for command-line arguments:
     # python ct_classifier/train.py --config configs/exp_resnet18.yaml
     parser = argparse.ArgumentParser(description='Train deep learning model.')
-    parser.add_argument('--config', help='Path to config file', default='configs/exp_resnet18.yaml')
+    parser.add_argument('--config', help='Path to config file', default='config_eval.yml')#configs/exp_resnet18.yaml')
     args = parser.parse_args()
 
     # load config
@@ -376,7 +386,7 @@ def main():
         starting_weights = cfg['starting_weights']
         print (f'loading custom starting weights: {starting_weights}')
         #model = load_pretrained_weights(cfg, model)
-        model = load_pretrained_weights_PAWS(cfg, model)
+        model = load_pretrained_weights(cfg, model)
         
     else:
         print ('starting weights are imagenet weights')
