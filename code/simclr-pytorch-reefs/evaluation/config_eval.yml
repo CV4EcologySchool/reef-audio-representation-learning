@@ -3,12 +3,12 @@
 # In Python, this is all read as a dict.
 
 # selecting dataset
-test_dataset: test_florida
-num_classes: 2 # all are 2, excpet bermuda = 1. 
+test_dataset: test_bermuda
+num_classes: 7 # all are 2, excpet bermuda = 1. 
 train_percent: 0.2 # change for dataset
 
 #ReefCLR or Imagenet wights? If starting_weights: None, it defaults to imagenet. If path to a checkpoint then ReefCLR
-starting_weights: None #/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar
+starting_weights: /home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar
 
 # dataset parameters
 data_root: /mnt/ssd-cluster/ben/data/full_dataset/ # provs redundant, coukd remove

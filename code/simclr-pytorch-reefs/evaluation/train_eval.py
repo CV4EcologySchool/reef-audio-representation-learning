@@ -27,8 +27,12 @@ import wandb
 
 from sklearn.metrics import f1_score
 
+from datetime import datetime
+     
+  
 
 
+# using test_data as the train_data was for SimCLR training, we are now evaluating, also why no transforms
 def create_dataloader(cfg, split='test_data', transform=False, train_percent=None, train_test=None):
     '''
         Loads a dataset according to the provided split and wraps it in a
@@ -90,8 +94,8 @@ def load_model(cfg):
     start_epoch = 0
     return model_instance, start_epoch
 
-def load_pretrained_weights(cfg, model):
-    custom_weights = cfg['starting_weights']
+def load_pretrained_weights(cfg, model, starting_weights):
+    custom_weights = starting_weights
 
     state = torch.load(open(custom_weights, 'rb'), map_location='cpu')
 
@@ -113,6 +117,7 @@ def load_pretrained_weights(cfg, model):
     if cfg['finetune'] == True:
         for name, param in model.named_parameters():
             if name not in ['classifier.weight', 'classifier.bias']:
+                # sets all others layers not to train i think?
                 param.requires_grad = False
 
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
@@ -128,29 +133,28 @@ def load_pretrained_weights(cfg, model):
     return model
 
 
-def load_pretrained_weights_PAWS(cfg, model):
-    checkpoint = torch.load(cfg['starting_weights'], map_location='cpu')
-    #pretrained_dict = {k.replace('module.', ''): v for k, v in checkpoint['encoder'].items()}
+# def load_pretrained_weights_PAWS(cfg, model):
+#     checkpoint = torch.load(cfg['starting_weights'], map_location='cpu')
 
-    pretrained_dict = {k.replace('module.', ''): v for k, v in checkpoint['encoder'].items()}
-    new_dict = model.state_dict()
+#     pretrained_dict = {k.replace('module.', ''): v for k, v in checkpoint['encoder'].items()}
+#     new_dict = model.state_dict()
     
-    for k, v in model.state_dict().items():
-        k_ = k.replace('convnet.','')
-        if k_ not in pretrained_dict:
-            print (f'key "{k_}" could not be found in loaded state dict')
-        elif pretrained_dict[k_].shape != v.shape:
-            print (f'key "{k_}" is of different shape in model and loaded state dict')
+#     for k, v in model.state_dict().items():
+#         k_ = k.replace('convnet.','')
+#         if k_ not in pretrained_dict:
+#             print (f'key "{k_}" could not be found in loaded state dict')
+#         elif pretrained_dict[k_].shape != v.shape:
+#             print (f'key "{k_}" is of different shape in model and loaded state dict')
             
-        else:
-            #pretrained_dict[k] = v
-            new_dict[k] = pretrained_dict[k_]
+#         else:
+#             #pretrained_dict[k] = v
+#             new_dict[k] = pretrained_dict[k_]
             
-    msg = model.load_state_dict(new_dict, strict=False)
-    print (f'loaded pretrained model with msg: {msg}')
-    print (f'loaded pretrained encoder from epoch: {checkpoint["epoch"]} ')
-    del checkpoint
-    return model
+#     msg = model.load_state_dict(new_dict, strict=False)
+#     print (f'loaded pretrained model with msg: {msg}')
+#     print (f'loaded pretrained encoder from epoch: {checkpoint["epoch"]} ')
+#     del checkpoint
+#     return model
 
 
 def save_model(cfg, epoch, model, stats):
@@ -359,19 +363,36 @@ def main():
         cfg['device'] = 'cpu'
 
 
-    wandb.init(
-    # set the wandb project where this run will be logged
-    project="midwater i2map data",
-    
-    # track hyperparameters and run metadata
-    config={
-    "learning_rate": cfg['learning_rate'],
-    "architecture": "resnet 50",
-    "dataset": "15 percent labeled",
-    "epochs": cfg['num_epochs'],
-    "weight_decay": cfg['weight_decay'],
-    "batch_size": cfg['batch_size']
-    })
+
+    # name the wandb run
+    now = datetime.now()
+    time_stamp = now.strftime("%m%d%H%M%S") 
+
+    # for extracting country from test dataset name
+    def extract_after_underscore(s):
+        return s.split("_")[1]
+    country = extract_after_underscore(cfg['test_dataset']) 
+
+    # get model type used
+    if cfg['starting_weights'] == None:
+        base_weights = 'ImageNet'
+    else:
+        base_weights = 'ReefCLR'
+
+    # name it
+    run_name = base_weights +'-' + country + '-' + time_stamp 
+
+
+    # Initialize the wandb run with the generated name
+    wandb.init(project="project2", name=run_name, 
+               # what hyperparams to note    
+               config={
+                "learning_rate": cfg['learning_rate'],
+                "architecture": "resnet 50",
+                "dataset": "15 percent labeled",
+                "epochs": cfg['num_epochs'],
+                "weight_decay": cfg['weight_decay'],
+                "batch_size": cfg['batch_size']})
 
 
     # initialize data loaders for training and validation set
@@ -381,15 +402,25 @@ def main():
 
     # initialize model
     model, current_epoch = load_model(cfg)
-    
-    if cfg['starting_weights'] != 'None':
-        starting_weights = cfg['starting_weights']
-        print (f'loading custom starting weights: {starting_weights}')
-        #model = load_pretrained_weights(cfg, model)
-        model = load_pretrained_weights(cfg, model)
+#####################    
+    # if cfg['starting_weights'] != 'None':
+    #     starting_weights = cfg['starting_weights']
+    #     print (f'loading custom starting weights: {starting_weights}')
+    #     #model = load_pretrained_weights(cfg, model)
+    #     model = load_pretrained_weights(cfg, model)
         
+    # else:
+    #     print ('starting weights are imagenet weights')
+#################
+    if cfg['starting_weights'] == 'ReefCLR':
+        starting_weights="/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar"
+        print (f'loading custom starting weights: {starting_weights}')
+        model = load_pretrained_weights(cfg, model, starting_weights)
+        
+    elif cfg['starting_weights'] == 'ImageNet':
+        print ('Using ImageNet weights')
     else:
-        print ('starting weights are imagenet weights')
+        print ('starting weights in cfg must be ReefCLR or ImageNet')
 
     # set up model optimizer
     optim = setup_optimizer(cfg, model)

@@ -3,12 +3,12 @@
 # In Python, this is all read as a dict.
 
 # selecting dataset
-test_dataset: test_bermuda
+test_dataset: test_indonesia
 num_classes: 2 # all are 2, excpet bermuda = 7. 
-train_percent: 0.2 # change for dataset
+train_percent: 0.2
 
-#ReefCLR or Imagenet wights? If starting_weights: None, it defaults to imagenet. If path to a checkpoint then ReefCLR
-starting_weights: None #/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar
+#ReefCLR or Imagenet wights? If starting_weights: ReefCLR
+starting_weights: ReefCLR
 
 # dataset parameters
 data_root: /mnt/ssd-cluster/ben/data/full_dataset/ # provs redundant, coukd remove
@@ -16,8 +16,8 @@ data_path: /mnt/ssd-cluster/ben/data/full_dataset/
 json_path: /home/ben/reef-audio-representation-learning/data/dataset.json
 
 # Hyper parameters
-num_epochs: 2
-batch_size: 128
+num_epochs: 20
+batch_size: 64
 learning_rate: 0.001
 weight_decay: 0.001
 
@@ -42,5 +42,5 @@ unlabeled_file: /root/75_percent_unlabeled_with_unknown.csv
 #inference_weights: /root/ct_classifier/model_states_simclr/200.pt
 inference_weights: /root/ct_classifier/model_states/resnet50_10p_200epochs.pt
 
-# Put None if using imagenet e.g starting_weights: None
+# Put None if using imagenet e.g starting_weights: ReefCLR
 
