@@ -363,28 +363,21 @@ def main():
         cfg['device'] = 'cpu'
 
 
-
-    # name the wandb run
+    #### name the wandb run
     now = datetime.now()
     time_stamp = now.strftime("%m%d%H%M%S") 
 
     # for extracting country from test dataset name
     def extract_after_underscore(s):
-        return s.split("_")[1]
+        return '_'.join(s.split('_')[1:])
     country = extract_after_underscore(cfg['test_dataset']) 
 
-    # get model type used
-    if cfg['starting_weights'] == None:
-        base_weights = 'ImageNet'
-    else:
-        base_weights = 'ReefCLR'
-
     # name it
-    run_name = base_weights +'-' + country + '-' + time_stamp 
+    run_name = cfg['starting_weights'] +'-' + country + '-' + time_stamp 
 
 
     # Initialize the wandb run with the generated name
-    wandb.init(project="project2", name=run_name, 
+    wandb.init(project="ImageNet", name=run_name, 
                # what hyperparams to note    
                config={
                 "learning_rate": cfg['learning_rate'],
@@ -395,23 +388,12 @@ def main():
                 "batch_size": cfg['batch_size']})
 
 
-    # initialize data loaders for training and validation set
+    #### initialize data loaders for training and validation set
     dl_train, class_weights_train = create_dataloader(cfg, split='test_data', transform=False, train_percent = cfg['train_percent'], train_test = 'train')
     dl_val, class_weights_val = create_dataloader(cfg, split='test_data', transform=False, train_percent = cfg['train_percent'], train_test = 'test')
 
-
-    # initialize model
+    #### initialize model
     model, current_epoch = load_model(cfg)
-#####################    
-    # if cfg['starting_weights'] != 'None':
-    #     starting_weights = cfg['starting_weights']
-    #     print (f'loading custom starting weights: {starting_weights}')
-    #     #model = load_pretrained_weights(cfg, model)
-    #     model = load_pretrained_weights(cfg, model)
-        
-    # else:
-    #     print ('starting weights are imagenet weights')
-#################
     if cfg['starting_weights'] == 'ReefCLR':
         starting_weights="/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar"
         print (f'loading custom starting weights: {starting_weights}')

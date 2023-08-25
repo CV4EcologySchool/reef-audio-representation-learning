@@ -6,7 +6,8 @@ configs=("config_bermuda.yml" "config_kenya.yml" "config_florida.yml" "config_fr
 # Set the desired batch_size and num_epochs IF ADDING HERE, ALSO ADD TO THE FOR LOOP BELOW 
 batch_size=64
 num_epochs=20
-train_percent=0.8 # may want to change by dataset
+learning_rate=0.00001
+train_percent=0.2 # may want to change by dataset
 starting_weights="ReefCLR" # "ReefCLR" or "ImageNet"
 
 # to add: starting weights, learning rate etc
@@ -19,6 +20,7 @@ for config in "${configs[@]}"; do
     # Use sed to modify the batch_size and num_epochs in the config file
     sed -i "s/batch_size: [0-9]*/batch_size: $batch_size/" multiple_config_runs/$config
     sed -i "s/num_epochs: [0-9]*/num_epochs: $num_epochs/" multiple_config_runs/$config
+    sed -i "s/learning_rate: .*/learning_rate: $learning_rate/" multiple_config_runs/$config
     sed -i "s/train_percent: .*/train_percent: $train_percent/" multiple_config_runs/$config
     sed -i "s/starting_weights: .*/starting_weights: $starting_weights/" multiple_config_runs/$config
 
