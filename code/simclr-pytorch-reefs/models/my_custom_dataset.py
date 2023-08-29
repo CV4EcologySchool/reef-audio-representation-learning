@@ -21,10 +21,10 @@ def resize_mel_spectrogram(mel_spec, desired_shape=(224, 224)):
 # augmentation
 augment_raw_audio = Compose(
     [
-        AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.0005, p=1), # good
+        AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.0005, p=0.5), # good # was 0.0001, 0.0005)
         PitchShift(min_semitones=-2, max_semitones=12, p=0.5), #set values so it doesnt shift too low, rmeoving bomb signal
         TimeStretch(p = 0.5), # defaults are fine
-        ClippingDistortion(0, 5, p = 0.5), # tested params to make sure its good
+        ClippingDistortion(0, 5, p = 0.5), # tested params to make sure its good  # was 0, 5, p= 5)
         Gain(-10, 5, p = 0.5), # defaults are fine
         # throws an error, so i commented it out
         #SevenBandParametricEQ(-12, 12, p = 0.5)

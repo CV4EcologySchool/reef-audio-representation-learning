@@ -5,10 +5,10 @@
 # selecting dataset
 test_dataset: test_florida
 num_classes: 2 # all are 2, excpet bermuda = 7. 
-train_percent: 0.2
+train_percent: 0.8
 
-#ReefCLR or Imagenet wights? If starting_weights: ReefCLR
-starting_weights: ReefCLR
+#ReefCLR or Imagenet wights? If starting_weights: ImageNet
+starting_weights: ImageNet
 
 # dataset parameters
 data_root: /mnt/ssd-cluster/ben/data/full_dataset/ # provs redundant, coukd remove
@@ -16,13 +16,13 @@ data_path: /mnt/ssd-cluster/ben/data/full_dataset/
 json_path: /home/ben/reef-audio-representation-learning/data/dataset.json
 
 # Hyper parameters
-num_epochs: 20
-batch_size: 64
+num_epochs: 2
+batch_size: 256
 learning_rate: 0.001
 weight_decay: 0.001
 
 # Not to change
-finetune: True # this will only train the head if true.
+finetune: False
 image_size: [224, 224]
 
 
@@ -42,5 +42,5 @@ unlabeled_file: /root/75_percent_unlabeled_with_unknown.csv
 #inference_weights: /root/ct_classifier/model_states_simclr/200.pt
 inference_weights: /root/ct_classifier/model_states/resnet50_10p_200epochs.pt
 
-# Put None if using imagenet e.g starting_weights: ReefCLR
+# Put None if using imagenet e.g starting_weights: ImageNet
 

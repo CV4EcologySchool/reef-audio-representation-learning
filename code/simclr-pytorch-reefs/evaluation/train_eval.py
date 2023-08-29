@@ -19,15 +19,16 @@ from torch.optim import SGD
 # let's import our own classes and functions!
 from util_eval import init_seed
 from my_custom_dataset_eval import CTDataset_train, CTDataset_test ###??
-from model_eval import CustomResNet18, CustomResNet50, SimClrPytorchResNet50, PAWSResNet50 
+from model_eval import CustomResNet50, SimClrPytorchResNet50 
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.utils import class_weight
 import numpy as np
 import wandb
 
+# ben imports
 from sklearn.metrics import f1_score
-
 from datetime import datetime
+import csv
      
   
 
@@ -70,27 +71,13 @@ def load_model(cfg):
     '''
         Creates a model instance and loads the latest model state weights.
     '''
-    #model_instance = CustomResNet18(cfg['num_classes'])         # create an object instance of our CustomResNet18 class
-    #model_instance = CustomResNet50(cfg['num_classes'])         # create an object instance of our CustomResNet18 class
-    model_instance = SimClrPytorchResNet50(cfg['num_classes'])
-    #model_instance = PAWSResNet50(cfg['num_classes'])
-    
-    # load latest model state
-#    model_states = glob.glob('model_states/*.pt')
-#     if len(model_states):
-#         # at least one save state found; get latest
-#         model_epochs = [int(m.replace('model_states/','').replace('.pt','')) for m in model_states]
-#         start_epoch = max(model_epochs)
+    if cfg['starting_weights'] == 'ReefCLR':
+        model_instance = SimClrPytorchResNet50(cfg['num_classes'])
+    elif cfg['starting_weights'] == 'ImageNet':
+        model_instance = CustomResNet50(cfg['num_classes'])
+    else:
+        print ('starting weights in cfg must be ReefCLR or ImageNet')
 
-#         # load state dict and apply weights to model
-#         print(f'Resuming from epoch {start_epoch}')
-#         state = torch.load(open(f'model_states/{start_epoch}.pt', 'rb'), map_location='cpu')
-#         model_instance.load_state_dict(state['model'])
-
-#     else:
-#         # no save state found; start anew
-#         print('Starting new model')
-#         start_epoch = 0
     start_epoch = 0
     return model_instance, start_epoch
 
@@ -123,38 +110,7 @@ def load_pretrained_weights(cfg, model, starting_weights):
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         assert len(parameters) == 2  # classifier.weight, classifier.bias
 
-    ## we need to copy everything except the last layer
-    #for key in state['model'].keys():
-        #if not(key == 'classifier.weight' or key== 'classifier.bias'):
-        ###### Tarun : LESSON LEARNT : THE LINE BELOW DOES NOT WORK FOR SOME REASON ..you must do it like mentioned in the most liked answer here https://discuss.pytorch.org/t/how-to-load-part-of-pre-trained-model/1113/2 ###
-        #model.state_dict()[key] = state['model'][key]
-    #model.load_state_dict(state['model'])
-    ##import ipdb;ipdb.set_trace()
     return model
-
-
-# def load_pretrained_weights_PAWS(cfg, model):
-#     checkpoint = torch.load(cfg['starting_weights'], map_location='cpu')
-
-#     pretrained_dict = {k.replace('module.', ''): v for k, v in checkpoint['encoder'].items()}
-#     new_dict = model.state_dict()
-    
-#     for k, v in model.state_dict().items():
-#         k_ = k.replace('convnet.','')
-#         if k_ not in pretrained_dict:
-#             print (f'key "{k_}" could not be found in loaded state dict')
-#         elif pretrained_dict[k_].shape != v.shape:
-#             print (f'key "{k_}" is of different shape in model and loaded state dict')
-            
-#         else:
-#             #pretrained_dict[k] = v
-#             new_dict[k] = pretrained_dict[k_]
-            
-#     msg = model.load_state_dict(new_dict, strict=False)
-#     print (f'loaded pretrained model with msg: {msg}')
-#     print (f'loaded pretrained encoder from epoch: {checkpoint["epoch"]} ')
-#     del checkpoint
-#     return model
 
 
 def save_model(cfg, epoch, model, stats):
@@ -363,21 +319,28 @@ def main():
         cfg['device'] = 'cpu'
 
 
-    #### name the wandb run
+    # name the wandb run
     now = datetime.now()
-    time_stamp = now.strftime("%m%d%H%M%S") 
+    time_stamp = now.strftime("%y%m%d%H%M")
+
 
     # for extracting country from test dataset name
     def extract_after_underscore(s):
-        return '_'.join(s.split('_')[1:])
+        return s.split("_")[1]
     country = extract_after_underscore(cfg['test_dataset']) 
 
+    # get model type used
+    if cfg['starting_weights'] == None:
+        base_weights = 'ImageNet'
+    else:
+        base_weights = 'ReefCLR'
+
     # name it
-    run_name = cfg['starting_weights'] +'-' + country + '-' + time_stamp 
+    run_name = base_weights +'-' + country + '-' + time_stamp 
 
 
     # Initialize the wandb run with the generated name
-    wandb.init(project="ImageNet", name=run_name, 
+    wandb.init(project="Fully trained ResNets", name=run_name, 
                # what hyperparams to note    
                config={
                 "learning_rate": cfg['learning_rate'],
@@ -388,12 +351,14 @@ def main():
                 "batch_size": cfg['batch_size']})
 
 
-    #### initialize data loaders for training and validation set
+    # initialize data loaders for training and validation set
     dl_train, class_weights_train = create_dataloader(cfg, split='test_data', transform=False, train_percent = cfg['train_percent'], train_test = 'train')
     dl_val, class_weights_val = create_dataloader(cfg, split='test_data', transform=False, train_percent = cfg['train_percent'], train_test = 'test')
 
-    #### initialize model
+
+    # initialize model
     model, current_epoch = load_model(cfg)
+
     if cfg['starting_weights'] == 'ReefCLR':
         starting_weights="/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar"
         print (f'loading custom starting weights: {starting_weights}')
@@ -407,8 +372,19 @@ def main():
     # set up model optimizer
     optim = setup_optimizer(cfg, model)
 
-    # we have everything now: data loaders, model, optimizer; let's do the epochs!
+    # Track metrics
+    metrics = {}
+
+    # Initialize CSV to save metrics
+    csv_path = '/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/evaluation/log_metrics/' + run_name + '.csv'
+    with open(csv_path, 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Epoch', 'F1 - val:', 'Accuracy - val', 'Balanced accuracy - val', 'Loss - val',
+                        'F1 - train', 'Accuracy - train', 'Balanced accuracy - train', 'Loss - train'])
+
+    # we have everything now: data loaders, model, optimizer, metrics; let's do the epochs!
     numEpochs = cfg['num_epochs']
+
     while current_epoch < numEpochs:
         current_epoch += 1
         print(f'Epoch {current_epoch}/{numEpochs}')
@@ -418,29 +394,55 @@ def main():
 
         # combine stats and save
         stats = {
-            'loss_train': loss_train,
-            'loss_val': loss_val,
-            'oa_train': oa_train,
-            'bac_train':bac_train,
-            'oa_val': oa_val,
-            'bac_val':bac_val,
-            'f1_train': f1_train,
-            'f1_val:': f1_val
-
-
-        }
-        wandb.log(stats)
-        #wandb.log({'loss_train': loss_train,
-        #     'loss_val': loss_val,
-        #     'oa_train': oa_train,
-        #     'bac_train':bac_train,
-        #     'oa_val': oa_val,
-        #     'bac_val':bac_val
-        #     })
+            'F1 - val:': f1_val,
+            'Accuracy - val': oa_val,
+            'Balanced accuracy - val':bac_val,
+            'Loss - val': loss_val,
+            'F1 - train': f1_train,
+            'Accuracy - train': oa_train,
+            'Balanced accuracy - train':bac_train,
+            'Loss - train': loss_train}
         
+        wandb.log(stats)
+
+        metrics[current_epoch] = {
+            'F1 - val:': f1_val,
+            'Accuracy - val': oa_val,
+            'Balanced accuracy - val':bac_val,
+            'Loss - val': loss_val,
+            'F1 - train': f1_train,
+            'Accuracy - train': oa_train,
+            'Balanced accuracy - train':bac_train,
+            'Loss - train': loss_train}
+        
+        # Append the metrics for the current epoch to the CSV file
+        with open(csv_path, 'a') as f:
+            writer = csv.writer(f)
+            row = [current_epoch] + list(metrics[current_epoch].values())
+            writer.writerow(row)
+            # Log to W&B
+            wandb.log(metrics[current_epoch]) 
+            
         if current_epoch % 40 ==0:
             save_model(cfg, current_epoch, model, stats)
+
+
+    # csv_path = '/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/evaluation/log_metrics/' + run_name + '.csv'
+
+    # with open(csv_path, 'w') as f:
+    #     writer = csv.writer(f)
+  
+    #     # Write header
+    #     writer.writerow(['Epoch', 'F1 - val:', 'Accuracy - val', 'Balanced accuracy - val', 'Loss - val',
+    #                     'F1 - train', 'Accuracy - train', 'Balanced accuracy - train', 'Loss - train']) 
     
+    # # Write each row  
+    # for epoch in metrics:
+    #     row = [epoch] + list(metrics[epoch].values())
+    #     writer.writerow(row)
+
+    # Log entire metrics dict at the end
+    wandb.log({"metrics": metrics})
 
     wandb.finish()
         
