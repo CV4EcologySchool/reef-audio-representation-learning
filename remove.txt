@@ -1,0 +1,5 @@
+code/notebooks/embedding_extractor/embeddings/
+home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/evaluation/embeddings/raw_embeddings
+
+home/ben/reef-audio-representation-learning/scratch/baseline
+scratch/baseline
