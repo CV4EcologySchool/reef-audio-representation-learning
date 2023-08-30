@@ -4,7 +4,7 @@ logs/
 code/simclr-pytorch-reefs/models/__pycache__/
 code/simclr-pytorch-reefs/myexman/
 code/simclr-pytorch-reefs/evaluation/__pycache__
-code/simclr-pytorch-reefs/evaluation/wandb
+code/simclr-pytorch-reefs/evaluation/wandb/
 code/simclr-pytorch-reefs/evaluation/model_states_i2map_simclr
 scratch/baseline
 
