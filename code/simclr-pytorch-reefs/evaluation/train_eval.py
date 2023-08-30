@@ -40,10 +40,11 @@ def create_dataloader(cfg, split='test_data', transform=False, train_percent=Non
         PyTorch DataLoader object.
     '''
     #dataset_instance = CTDataset(cfg, split)        # create an object instance of our CTDataset class
+    to_transform = cfg['transform']
     if train_test == 'train':
-        dataset_instance = CTDataset_train(cfg, split=split, transform=transform, train_percent=train_percent)
+        dataset_instance = CTDataset_train(cfg, split=split, transform=to_transform, train_percent=train_percent)
     elif train_test == 'test':
-        dataset_instance = CTDataset_test(cfg, split=split, transform=False, train_percent=train_percent)
+        dataset_instance = CTDataset_test(cfg, split=split, transform=to_transform, train_percent=train_percent)
 
     device = cfg['device']
 
@@ -109,6 +110,8 @@ def load_pretrained_weights(cfg, model, starting_weights):
 
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         assert len(parameters) == 2  # classifier.weight, classifier.bias
+    else:
+        pass
 
     return model
 
@@ -123,11 +126,11 @@ def save_model(cfg, epoch, model, stats):
     # ...and save
     torch.save(stats, open(f'model_states_i2map_simclr/10p_{epoch}.pt', 'wb'))
     
-    # also save config file if not present
-    cfpath = 'model_states/config.yaml'
-    if not os.path.exists(cfpath):
-        with open(cfpath, 'w') as f:
-            yaml.dump(cfg, f)
+    # # also save config file if not present
+    # cfpath = 'model_states/config.yaml'
+    # if not os.path.exists(cfpath):
+    #     with open(cfpath, 'w') as f:
+    #         yaml.dump(cfg, f)
 
             
 
@@ -160,7 +163,11 @@ def train(cfg, dataLoader, model, optimizer, class_weights_train):
 
     # loss function
     criterion = nn.CrossEntropyLoss(class_weights_train)
-    #criterion = nn.CrossEntropyLoss()
+    #criterion = nn.BCELoss() ###############################################################################################
+    ##############################################  BCELoss()  ##############################################################
+    ##############################################  BCELoss()  ##############################################################
+    ##############################################  BCELoss()  ##############################################################
+    ##############################################  BCELoss()  ##############################################################
     
     # running averages
     loss_total, oa_total, f1 = 0.0, 0.0, 0.0                         # for now, we just log the loss and overall accuracy (OA)
@@ -323,10 +330,9 @@ def main():
     now = datetime.now()
     time_stamp = now.strftime("%y%m%d%H%M")
 
-
-    # for extracting country from test dataset name
+    # get country name
     def extract_after_underscore(s):
-        return s.split("_")[1]
+        return "_".join(s.split("_")[1:])
     country = extract_after_underscore(cfg['test_dataset']) 
 
     # get model type used
@@ -336,11 +342,11 @@ def main():
         base_weights = 'ReefCLR'
 
     # name it
-    run_name = base_weights +'-' + country + '-' + time_stamp 
+    run_name = base_weights + str(cfg['batch_size']) +'-' + country + '-' + time_stamp 
 
 
     # Initialize the wandb run with the generated name
-    wandb.init(project="Fully trained ResNets", name=run_name, 
+    wandb.init(project=cfg['wandb_project'], name=run_name, 
                # what hyperparams to note    
                config={
                 "learning_rate": cfg['learning_rate'],
@@ -352,15 +358,15 @@ def main():
 
 
     # initialize data loaders for training and validation set
-    dl_train, class_weights_train = create_dataloader(cfg, split='test_data', transform=False, train_percent = cfg['train_percent'], train_test = 'train')
-    dl_val, class_weights_val = create_dataloader(cfg, split='test_data', transform=False, train_percent = cfg['train_percent'], train_test = 'test')
+    dl_train, class_weights_train = create_dataloader(cfg, split='test_data', transform=cfg['transform'], train_percent = cfg['train_percent'], train_test = 'train')
+    dl_val, class_weights_val = create_dataloader(cfg, split='test_data', transform=cfg['transform'], train_percent = cfg['train_percent'], train_test = 'test')
 
 
     # initialize model
     model, current_epoch = load_model(cfg)
 
     if cfg['starting_weights'] == 'ReefCLR':
-        starting_weights="/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/logs/exman-train.py/runs/baseline/checkpoint-5100.pth.tar"
+        starting_weights="/home/ben/reef-audio-representation-learning/scratch/baseline/checkpoint-5100.pth.tar"
         print (f'loading custom starting weights: {starting_weights}')
         model = load_pretrained_weights(cfg, model, starting_weights)
         
@@ -379,7 +385,7 @@ def main():
     csv_path = '/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/evaluation/log_metrics/' + run_name + '.csv'
     with open(csv_path, 'w') as f:
         writer = csv.writer(f)
-        writer.writerow(['Epoch', 'F1 - val:', 'Accuracy - val', 'Balanced accuracy - val', 'Loss - val',
+        writer.writerow(['Epoch', 'F1 - val', 'Accuracy - val', 'Balanced accuracy - val', 'Loss - val',
                         'F1 - train', 'Accuracy - train', 'Balanced accuracy - train', 'Loss - train'])
 
     # we have everything now: data loaders, model, optimizer, metrics; let's do the epochs!
@@ -394,7 +400,7 @@ def main():
 
         # combine stats and save
         stats = {
-            'F1 - val:': f1_val,
+            'F1 - val': f1_val,
             'Accuracy - val': oa_val,
             'Balanced accuracy - val':bac_val,
             'Loss - val': loss_val,
@@ -406,7 +412,7 @@ def main():
         wandb.log(stats)
 
         metrics[current_epoch] = {
-            'F1 - val:': f1_val,
+            'F1 - val': f1_val,
             'Accuracy - val': oa_val,
             'Balanced accuracy - val':bac_val,
             'Loss - val': loss_val,
@@ -423,26 +429,13 @@ def main():
             # Log to W&B
             wandb.log(metrics[current_epoch]) 
             
-        if current_epoch % 40 ==0:
-            save_model(cfg, current_epoch, model, stats)
+        # if current_epoch % 40 ==0:
+        #     save_model(cfg, current_epoch, model, stats)
 
 
-    # csv_path = '/home/ben/reef-audio-representation-learning/code/simclr-pytorch-reefs/evaluation/log_metrics/' + run_name + '.csv'
-
-    # with open(csv_path, 'w') as f:
-    #     writer = csv.writer(f)
-  
-    #     # Write header
-    #     writer.writerow(['Epoch', 'F1 - val:', 'Accuracy - val', 'Balanced accuracy - val', 'Loss - val',
-    #                     'F1 - train', 'Accuracy - train', 'Balanced accuracy - train', 'Loss - train']) 
-    
-    # # Write each row  
-    # for epoch in metrics:
-    #     row = [epoch] + list(metrics[epoch].values())
-    #     writer.writerow(row)
 
     # Log entire metrics dict at the end
-    wandb.log({"metrics": metrics})
+   # wandb.log({"metrics": metrics})
 
     wandb.finish()
         

@@ -5,11 +5,14 @@ configs=("config_bermuda.yml" "config_kenya.yml" "config_florida.yml" "config_fr
 
 # Set the desired batch_size and num_epochs IF ADDING HERE, ALSO ADD TO THE FOR LOOP BELOW 
 batch_size=256
-num_epochs=2
+num_epochs=100
 learning_rate=0.001
 train_percent=0.8 # may want to change by dataset
 starting_weights="ImageNet" # "ReefCLR" or "ImageNet" - should always be ImageNet for fully training!
 finetune=False
+transform=False
+device="cuda:0"
+wandb_project="Fully_trained_ResNet2"
 
 # to add: starting weights, learning rate etc
 # to do: name the wandb somthing sensible.
@@ -25,6 +28,9 @@ for config in "${configs[@]}"; do
     sed -i "s/train_percent: .*/train_percent: $train_percent/" multiple_config_runs/$config
     sed -i "s/starting_weights: .*/starting_weights: $starting_weights/" multiple_config_runs/$config
     sed -i "s/finetune: .*/finetune: $finetune/" multiple_config_runs/$config
+    sed -i "s/transform: .*/transform: $transform/" multiple_config_runs/$config
+    sed -i "s/device: .*/device: $device/" multiple_config_runs/$config
+    sed -i "s/wandb_project: .*/wandb_project: $wandb_project/" multiple_config_runs/$config
 
 
     python train_eval.py --config multiple_config_runs/$config

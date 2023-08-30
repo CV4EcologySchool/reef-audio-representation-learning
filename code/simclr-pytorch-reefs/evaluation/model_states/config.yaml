@@ -1,0 +1,24 @@
+batch_size: 64
+data_path: /mnt/ssd-cluster/ben/data/full_dataset/
+data_root: /mnt/ssd-cluster/ben/data/full_dataset/
+device: cuda:1
+finetune: false
+image_size:
+- 224
+- 224
+inference_weights: /root/ct_classifier/model_states/resnet50_10p_200epochs.pt
+json_path: /home/ben/reef-audio-representation-learning/data/dataset.json
+learning_rate: 0.001
+num_classes: 2
+num_epochs: 100
+num_workers: 4
+seed: 0
+starting_weights: ImageNet
+test_dataset: test_florida
+test_label_file: /root/10_percent_test_with_unknown.csv
+train_label_file:
+- /root/10_percent_train_with_unknown.csv
+train_percent: 0.8
+unlabeled_file: /root/75_percent_unlabeled_with_unknown.csv
+val_label_file: /root/5_percent_val_with_unknown.csv
+weight_decay: 0.001

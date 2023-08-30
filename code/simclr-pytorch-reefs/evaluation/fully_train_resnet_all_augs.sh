@@ -12,7 +12,7 @@ starting_weights="ImageNet" # "ReefCLR" or "ImageNet" - should always be ImageNe
 finetune=False # True = train only final layer, False = train all layers
 transform=True
 device="cuda:1"
-wandb_project="Fully_trained_ResNet_augmented"
+wandb_project="Fully_trained_ResNet_augmented2"
 
 # to add: starting weights, learning rate etc
 # to do: name the wandb somthing sensible.
