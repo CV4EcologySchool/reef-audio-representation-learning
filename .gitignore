@@ -9,7 +9,7 @@ code/simclr-pytorch-reefs/evaluation/model_states_i2map_simclr
 scratch/baseline
 code/simclr-pytorch-reefs/evaluation/embeddings/raw_embeddings/
 code/simclr-pytorch-reefs/evaluation/embeddings/raw_embeddings
-code/simclr-pytorch-reefs/evaluation/embeddings/log_metrics/
+code/simclr-pytorch-reefs/evaluation/embeddings/log_metrics
 
 
 
