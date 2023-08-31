@@ -6,10 +6,10 @@ color_dist_s: 1.0
 config_file: ''
 data: ROV
 dist: dp
-dist_address: '198.176.97.113' # changed to bens remote machine
+dist_address: '198.176.97.88' # changed to bens remote machine
 eval_freq: 30
 gpu: 1 ################# changed from 0 
-iters: 16000 # num batches seen, not epochs! So 1 epoch. 54000/512 = 105.5 iters per epoch
+iters: 5400 # num batches seen, not epochs! So 1 epoch. 54000/512 = 105.5 iters per epoch
 log_freq: 5
 lr: 0.6  # was 0.6 default
 lr_schedule: warmup-anneal

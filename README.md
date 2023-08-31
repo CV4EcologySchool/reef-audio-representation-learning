@@ -25,6 +25,24 @@ locations/countries
     1. For embeddings only UMAP dimensionality reduction was performed (to 10 dims) and these reduced embeddings were clustered using affinity propagation. The fidelity of clusters to true classes was then assesed using chi-sq.
     1. 2D UMAPs were also plotted with each embedding.
     
+## How to run some scripts (format in markdown properly soon)
+SimCLR running scripts
+To train SimCLR training:
+-	Go to /code/simclr-pytorch-reefs folder
+-	Run: python train.py --config configs/reefs_configs.yaml
+-	This uses the reef_config.yaml where params can be set
+
+To train supervised ResNets:
+-	This is to get a baseline as to what the upper limit using a fully trained neural net on each tasks is. This can be used to see how the RF’s trained on the embedding do against the supposed upper limit
+-	Go to evaluation folders
+-	To run all on some fixed params, use
+    -  ./fully_train_resnet_all.sh 
+    - This is a .sh script that sets some params that get passed to each config yaml for each test dataset (evaluation /stored in multiple_config_runs). Further params can be set in these yamls
+-	I also found batch size was important for some datasets (I think mainly FP and Aus which needed low batch size), so tested running this using a batch size sweep:
+    - ./batchsize_sweep.sh
+
+
+
 ## Folder structure
 Needs further tidy up
 ```
