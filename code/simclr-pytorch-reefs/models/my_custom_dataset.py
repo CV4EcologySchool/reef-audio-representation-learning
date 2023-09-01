@@ -25,7 +25,7 @@ augment_raw_audio = Compose(
         PitchShift(min_semitones=-2, max_semitones=12, p=0.5), #set values so it doesnt shift too low, rmeoving bomb signal
         TimeStretch(p = 0.5), # defaults are fine
         ClippingDistortion(0, 5, p = 0.5), # tested params to make sure its good  # was 0, 5, p= 5)
-        Gain(-10, 5, p = 0.5), # defaults are fine
+        Gain(-10, 5, p = 0.5) # defaults are fine
         # throws an error, so i commented it out
         #SevenBandParametricEQ(-12, 12, p = 0.5)
     ]

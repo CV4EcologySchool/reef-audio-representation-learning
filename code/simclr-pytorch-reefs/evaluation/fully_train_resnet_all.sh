@@ -12,7 +12,7 @@ starting_weights="ImageNet" # "ReefCLR" or "ImageNet" - should always be ImageNe
 finetune=False
 transform=False
 device="cuda:0"
-wandb_project="Fully_trained_ResNet2"
+wandb_project="Fully_trained_ResNet_batch256"
 
 # to add: starting weights, learning rate etc
 # to do: name the wandb somthing sensible.
